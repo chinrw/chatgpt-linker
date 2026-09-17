@@ -113,28 +113,21 @@ plan-review import '<request_id>' --file /absolute/path/to/review.md \
 
 后续验证、固定结果存储和 agent 领取照常工作。仍只使用 ChatGPT 订阅，不暗中换成 API。
 
-## 6. 推荐的进程隔离：Docker stdio
+## 6. 运行面与隔离边界
 
-简单 launcher 限制了环境和程序接口，但不是防御同一 UID 恶意进程的系统沙箱。更强部署可使用：
+`serve` 是 tunnel-client 在**你本机、以你的账号**拉起的进程。推荐用仓库外固定路径的 launcher 启动它（形状见 `scripts/tunnel-launcher.example.sh`）：`env -i` + 绝对路径的解释器 + 一个空的 `SAFE_HOME`。这样它不继承你的凭据环境变量，对外接口也只有 `search` / `fetch` / `submit_review`。
 
-```sh
-docker build -t plan-review-bridge:0.1.0 .
-```
+**本项目不提供操作系统级文件系统隔离。** launcher 只清理环境，进程的读权限仍等同于你的账号；`fetch` 只接受 `<request_id>:request` 这类 ID，约束的是协议接口，不是进程权限。不要因此把"已经脱敏"理解成"即使进程被滥用也没有影响"。
 
-把以下命令写入仓库外、固定路径的 launcher，`EXCHANGE` 换成真实路径：
+需要更强隔离时，请用你自己的沙箱运行**同一条**命令：
 
 ```sh
-exec docker run --rm -i --network none --read-only \
-  --user "$(id -u):$(id -g)" \
-  --cap-drop ALL --security-opt no-new-privileges \
-  --mount "type=bind,src=$EXCHANGE,dst=/exchange,readonly" \
-  --mount "type=bind,src=$EXCHANGE/outbox,dst=/exchange/outbox" \
-  plan-review-bridge:0.1.0
+exec <你的沙箱> -- /absolute/path/to/.venv/bin/plan-review serve --exchange <EXCHANGE>
 ```
 
-外层 exchange 只读，只有 outbox 可写；不挂载源仓库、private provenance、HOME、SSH agent、Docker socket 或密钥。不用 `-t`，防止 PTY 干扰 stdio。只读 inbox 仍可看到宿主 CLI 新发布的任务；outbox 的新任务目录由宿主 CLI 创建。
+只把 exchange 挂进去；源仓库、private provenance、HOME、SSH agent、云凭据和 Docker socket 都不要挂。UID 与目录权限（exchange 需属于运行 UID 且 mode 0700，否则 `UNSAFE_STATE`）必须自行验证——**本项目不附带容器配方，也不对任何第三方沙箱配置的正确性负责**。
 
-此 Docker 示例尚未在交付环境运行；实际部署需要验证 UID/目录权限和挂载行为。Tunnel 的网络访问留在宿主父进程。
+无论哪种方式，Tunnel 的网络访问都留在宿主父进程；stdio 子进程不需要网络。
 
 ## 7. 常见问题
 

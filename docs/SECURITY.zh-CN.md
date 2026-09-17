@@ -43,7 +43,7 @@ replacement = "<INTERNAL_SYSTEM>"
 
 `submit_review` 明确声明写操作。不要尝试通过 search/query/GET/日志隐式回传结果。本地 HTTP 仅用于可信本机调试，校验本地 bearer、Host 和 Origin；没有 OAuth，禁止直接公网部署。
 
-清理环境的 launcher 减少凭据继承，但实际 OS 文件读写隔离请使用 ChatGPT 设置教程的容器方案。不要挂载原 repo、private provenance、HOME、SSH、云凭据或 Docker socket 到 MCP 容器。
+清理环境的 launcher 减少凭据继承，但不改变进程的文件系统权限：`serve` 仍以你的账号运行，因此**本项目不提供操作系统级读写隔离**。协议层的路径校验约束的是接口，不是进程权限。需要更强隔离时，用你自己的沙箱运行同一条 `serve` 命令，只挂载 exchange，不要挂原 repo、private provenance、HOME、SSH、云凭据或 Docker socket；那类配置的正确性由你自行验证，本项目不附带也不替它背书。
 
 ## 生命周期与删除
 

@@ -104,7 +104,7 @@ plan-review result "$RID"
 
 这是 MCP stdio 进程：启动后等待 JSON-RPC 输入是正常的，不会打印网页地址。不要将 CLI 的整个 state 根目录当作 `--exchange`。
 
-官方 Tunnel 是传输方式，不是模型 API 后端。应使用清理环境的 launcher，或教程中的容器只读挂载。**本项目没有公网 OAuth 服务；不要把本地调试 HTTP 端口直接暴露到互联网。**
+官方 Tunnel 是传输方式，不是模型 API 后端。应使用清理环境的 launcher 启动 `serve`（`scripts/tunnel-launcher.example.sh` 的形状：`env -i` + 绝对路径解释器 + 空 HOME）。**本项目不提供 OS 级文件系统隔离**：launcher 只清理环境，进程读权限仍等同于你的账号；需要更强隔离请自行用沙箱运行同一条 `serve` 命令。**本项目没有公网 OAuth 服务；不要把本地调试 HTTP 端口直接暴露到互联网。**
 
 连接后，工具清单应只有 `search`、`fetch`、`submit_review`。在 ChatGPT 中选择 Pro，发送 `prompt "$RID"` 的结果。调用成功后：
 

@@ -4,8 +4,8 @@ import argparse
 import shutil
 from pathlib import Path
 
-ROOT_FILES = ('README.md','LICENSE','pyproject.toml','MANIFEST.in','.gitignore','.dockerignore',
-              'Dockerfile','CHANGELOG.md','CONTRIBUTING.md','SECURITY.md','AGENTS.md')
+ROOT_FILES = ('README.md','LICENSE','pyproject.toml','MANIFEST.in','.gitignore',
+              'CHANGELOG.md','CONTRIBUTING.md','SECURITY.md','AGENTS.md')
 ROOT_DIRS = ('src','tests','docs','skills','examples','scripts','.github')
 SKIP_DIRS = {'__pycache__','.pytest_cache','.venv','node_modules','state','build','dist'}
 

@@ -43,7 +43,7 @@ submit_review → completed，回执 source=mcp_submit
 
 ### 本机首次执行时的失败（已修复）
 
-初次执行是 86/88：`test_scripts.py` 两项失败，原因是发布白名单要求存在 `.github/`，而工作副本缺少 `.github/workflows/ci.yml`、`.gitignore`、`.dockerignore`。补齐这三个发布文件后 88/88 通过。这正是 `snapshot_source.py` 的失败即停设计要暴露的问题——缺失的发布文件不会被静默跳过。
+初次执行是 86/88：`test_scripts.py` 两项失败，原因是发布白名单要求存在 `.github/`，而工作副本缺少 `.github/workflows/ci.yml`。同一份工作副本里 `.gitignore` 也不存在——白名单对缺失的**根文件**是静默跳过，所以只有目录缺失会报错。补齐后 88/88 通过。这正是 `snapshot_source.py` 失败即停设计要暴露的问题：缺失的发布目录不会被静默跳过。
 
 ### 88 项测试的分布
 
@@ -95,7 +95,6 @@ submit_review → completed，回执 source=mcp_submit
 - 用户的 ChatGPT Pro 模型与自定义 MCP 写工具的真实账号验收。
 - OpenAI Secure MCP Tunnel 的实际认证、组织关联、运行及连接。
 - 官方 MCP SDK/Inspector 或其他独立客户端的完整互操作性认证。
-- Docker 镜像构建与容器挂载运行。
 - Python 3.11/3.12 在**本机**的执行：本机只有 CPython 3.14.7。这两个版本只在 GitHub Actions 的 ubuntu/macOS runner 上执行过（见上表），不是本地运行。
 - Windows 原生执行；本项目定位 POSIX（Linux/macOS/WSL2），未测试 Windows。
 - 完整企业 DLP、渗透测试、形式化证明或零泄露保证。
