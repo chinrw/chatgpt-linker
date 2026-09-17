@@ -1,6 +1,6 @@
 # Verification report — v0.1.0
 
-核实日期：2026-09-17。本文件记录两次独立核实，环境不同，结论分别标注。
+核实日期：2026-09-17。本文件记录不同环境下的独立核实，结论分别按环境标注；无法在本机复现的环境只作为记录保留。
 
 ## A. 交付环境（Linux，CPython 3.13.5）
 
@@ -74,16 +74,21 @@ submit_review → completed，回执 source=mcp_submit
 ## GitHub 发布
 
 - 仓库：<https://github.com/chinrw/codex-linker>（**public**，仓库所有者手工创建，不是由发布脚本创建）
-- 推送方式：普通 `git push -u origin main`；远端 `refs/heads/main` 为 `57441604974e0a23fce3d861779ed48b4751f40e`
-- 已通过 `git ls-remote origin` 与 `gh repo view`（`defaultBranchRef.name=main`、`isEmpty=false`）核实
-- 首次提交包含 46 个文件：源码、测试、文档、skill、示例、脚本、CI 配置；不含任务 state、`.venv`、缓存或凭据
+- 首次提交：`57441604974e0a23fce3d861779ed48b4751f40e`，46 个文件：源码、测试、文档、skill、示例、脚本、CI 配置；不含任务 state、`.venv`、缓存或凭据
+- 推送方式：普通 `git push origin main`；每次推送后用 `git ls-remote origin` 核对远端 `refs/heads/main` 与本地 `main` 的 SHA 一致，`gh repo view` 显示 `defaultBranchRef.name=main`、`isEmpty=false`
+- 记录性提交会改变 head，所以这里不把“当前 head”写成固定值；以 `git ls-remote origin` 与 Actions 页面为准
 - `scripts/publish-github.sh` 只在模拟 `gh` 下测试过，本次**没有**真实调用它；它面向的是另建一个不存在的私有仓库
 
 ### 远端 CI
 
-首次远端运行 [run 35206621575](https://github.com/chinrw/codex-linker/actions/runs/35206621575) 的 5 个 job 全部 `success`：ubuntu-latest 上的 Python 3.11 / 3.12 / 3.13，以及 macos-latest 上的 Python 3.12 / 3.13。每个 job 都执行 compileall、`bash -n scripts/*.sh`、88 项 unittest，并用 uv 构建 wheel。
+| 运行 | head | 结果 |
+|---|---|---|
+| [run 35206621575](https://github.com/chinrw/codex-linker/actions/runs/35206621575) | `5744160` | 5 个 job 全部 `success` |
+| [run 35206837850](https://github.com/chinrw/codex-linker/actions/runs/35206837850) | `f1a4a96` | 5 个 job 全部 `success`，无 annotation |
 
-该次运行带来两条非失败类 annotation（Node 20 弃用提示、uv 缓存无法失效），已在后续提交中处理：action 升级到 `actions/checkout@v7`、`actions/setup-python@v7`、`astral-sh/setup-uv@v10.1.0`，并关闭与单次 wheel 构建无关的 uv 缓存。CI 通过的结论只对上面这次运行负责。
+两次都是同一矩阵：ubuntu-latest 上的 Python 3.11 / 3.12 / 3.13，以及 macos-latest 上的 Python 3.12 / 3.13。每个 job 执行 compileall、`bash -n scripts/*.sh`、88 项 unittest，并用 uv 构建 wheel。
+
+第一次运行留下两条非失败类 annotation（Node 20 弃用提示、uv 缓存无法失效）；第二次运行前已升级到 `actions/checkout@v7`、`actions/setup-python@v7`、`astral-sh/setup-uv@v10.1.0` 并关闭无意义的 uv 缓存，annotation 归零。CI 结论只对表中这两次运行负责；它验证的是**测试与构建**，不验证真实 ChatGPT 会话。此后每次推送到 `main` 都会重跑同一矩阵，本文件不再逐次登记。
 
 ## 未执行／不得据此宣称已通过
 
@@ -91,7 +96,8 @@ submit_review → completed，回执 source=mcp_submit
 - OpenAI Secure MCP Tunnel 的实际认证、组织关联、运行及连接。
 - 官方 MCP SDK/Inspector 或其他独立客户端的完整互操作性认证。
 - Docker 镜像构建与容器挂载运行。
-- Python 3.11/3.12 的具体执行：本机只有 CPython 3.14.7，其余版本交由远端 CI 矩阵，尚未取得结果。
+- Python 3.11/3.12 在**本机**的执行：本机只有 CPython 3.14.7。这两个版本只在 GitHub Actions 的 ubuntu/macOS runner 上执行过（见上表），不是本地运行。
+- Windows 原生执行；本项目定位 POSIX（Linux/macOS/WSL2），未测试 Windows。
 - 完整企业 DLP、渗透测试、形式化证明或零泄露保证。
 
 定位：可运行的 Alpha 实现。先按 ChatGPT 接入教程用合成材料验证实际账号，再批准真实项目外发。
