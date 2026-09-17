@@ -117,7 +117,7 @@ plan-review import '<request_id>' --file /absolute/path/to/review.md \
 
 `serve` 是 tunnel-client 在**你本机、以你的账号**拉起的进程。推荐用仓库外固定路径的 launcher 启动它（形状见 `scripts/tunnel-launcher.example.sh`）：`env -i` + 绝对路径的解释器 + 一个空的 `SAFE_HOME`。这样它不继承你的凭据环境变量，对外接口也只有 `search` / `fetch` / `submit_review`。
 
-**本项目不提供操作系统级文件系统隔离。** launcher 只清理环境，进程的读权限仍等同于你的账号；`fetch` 只接受 `<request_id>:request` 这类 ID，约束的是协议接口，不是进程权限。不要因此把"已经脱敏"理解成"即使进程被滥用也没有影响"。
+**本项目不提供操作系统级文件系统隔离。** launcher 只清理环境，进程的读权限仍等同于你的账号；`fetch` 只接受 `<request_id>:request` 这类 ID，约束的是协议接口，不是进程权限。不要因此把“已经脱敏”理解成“即使进程被滥用也没有影响”。
 
 需要更强隔离时，请用你自己的沙箱运行**同一条**命令：
 
