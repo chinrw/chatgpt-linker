@@ -45,6 +45,8 @@ submit_review → completed，回执 source=mcp_submit
 
 初次执行是 86/88：`test_scripts.py` 两项失败，原因是发布白名单要求存在 `.github/`，而工作副本缺少 `.github/workflows/ci.yml`、`.gitignore`、`.dockerignore`。补齐这三个发布文件后 88/88 通过。这正是 `snapshot_source.py` 的失败即停设计要暴露的问题——缺失的发布文件不会被静默跳过。
 
+### 88 项测试的分布
+
 | 测试文件 | 数量 | 重点 |
 |---|---:|---|
 | test_sanitize.py | 23 | 已知凭据、语义替换、最终出口、路径/链接、权限、大小/类型 |
@@ -55,9 +57,9 @@ submit_review → completed，回执 source=mcp_submit
 | test_scripts.py | 7 | skill 安装、源码快照、模拟 gh 的权限/冲突/发布路径 |
 | **合计** | **88** | 单元与本地集成回归 |
 
-额外安装验证：把生成的 wheel 离线安装到**新建的虚拟环境**，不使用源码目录的 PYTHONPATH。通过安装后的 console script 执行 policy-init、prepare/publish；通过真实 MCP stdio 初始化、fetch、submit_review；再由 wait 取得 Markdown。确认结果完整、hash 校验通过、所选源文件未改变。
+额外安装验证：把生成的 wheel 安装到**新建的虚拟环境**，不使用源码目录的 PYTHONPATH。通过安装后的 console script 执行 policy-init、prepare/publish；通过真实 MCP stdio 初始化、fetch、submit_review；再由 wait 取得 Markdown。确认结果完整、hash 校验通过、所选源文件未改变。
 
-源码归档会从白名单生成，排除 `.venv`、缓存、真实状态和 Git history；文档中的相对链接已检查，无断链。GitHub 发布脚本的测试使用明确的模拟 gh，**没有实际创建远程仓库**。
+源码归档会从白名单生成，排除 `.venv`、缓存、真实状态和 Git history；文档中的相对链接已检查，无断链。GitHub 发布脚本的测试使用明确的模拟 gh，**没有实际创建远程仓库**；本仓库是用普通 `git push` 推送到既有的 `chinrw/codex-linker`，没有经过该脚本。
 
 可选 coverage 测量：父进程 74% statement coverage。CLI 多数测试运行于独立子进程，这次未合并其 coverage，因此该数字不代表 CLI 未测试，也不应被改写成一个不存在的全进程覆盖率。
 
@@ -69,14 +71,27 @@ submit_review → completed，回执 source=mcp_submit
 - 自定义脱敏替换后的文本再次做字符/行长度检查。
 - policy 必须由运行用户拥有，且不可被其他用户写入。
 
+## GitHub 发布
+
+- 仓库：<https://github.com/chinrw/codex-linker>（**public**，仓库所有者手工创建，不是由发布脚本创建）
+- 推送方式：普通 `git push -u origin main`；远端 `refs/heads/main` 为 `57441604974e0a23fce3d861779ed48b4751f40e`
+- 已通过 `git ls-remote origin` 与 `gh repo view`（`defaultBranchRef.name=main`、`isEmpty=false`）核实
+- 首次提交包含 46 个文件：源码、测试、文档、skill、示例、脚本、CI 配置；不含任务 state、`.venv`、缓存或凭据
+- `scripts/publish-github.sh` 只在模拟 `gh` 下测试过，本次**没有**真实调用它；它面向的是另建一个不存在的私有仓库
+
+### 远端 CI
+
+首次远端运行 [run 35206621575](https://github.com/chinrw/codex-linker/actions/runs/35206621575) 的 5 个 job 全部 `success`：ubuntu-latest 上的 Python 3.11 / 3.12 / 3.13，以及 macos-latest 上的 Python 3.12 / 3.13。每个 job 都执行 compileall、`bash -n scripts/*.sh`、88 项 unittest，并用 uv 构建 wheel。
+
+该次运行带来两条非失败类 annotation（Node 20 弃用提示、uv 缓存无法失效），已在后续提交中处理：action 升级到 `actions/checkout@v7`、`actions/setup-python@v7`、`astral-sh/setup-uv@v10.1.0`，并关闭与单次 wheel 构建无关的 uv 缓存。CI 通过的结论只对上面这次运行负责。
+
 ## 未执行／不得据此宣称已通过
 
 - 用户的 ChatGPT Pro 模型与自定义 MCP 写工具的真实账号验收。
 - OpenAI Secure MCP Tunnel 的实际认证、组织关联、运行及连接。
 - 官方 MCP SDK/Inspector 或其他独立客户端的完整互操作性认证。
 - Docker 镜像构建与容器挂载运行。
-- macOS、Python 3.11/3.12 的本地执行；已提供相应 GitHub Actions 矩阵，尚未在远端运行。
-- GitHub 仓库创建、远端 push 或 GitHub Actions 成功结果。
+- Python 3.11/3.12 的具体执行：本机只有 CPython 3.14.7，其余版本交由远端 CI 矩阵，尚未取得结果。
 - 完整企业 DLP、渗透测试、形式化证明或零泄露保证。
 
 定位：可运行的 Alpha 实现。先按 ChatGPT 接入教程用合成材料验证实际账号，再批准真实项目外发。

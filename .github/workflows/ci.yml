@@ -27,10 +27,10 @@ jobs:
             python-version: '3.11'
     steps:
       - name: Check out the release snapshot
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -46,7 +46,11 @@ jobs:
         run: python -m unittest discover -s tests -v
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v10.1.0
+        with:
+          # The build is a single wheel with no locked dependencies to key on;
+          # an Actions cache here would only add noise.
+          enable-cache: false
 
       # uv builds in an isolated environment from pyproject.toml; no direct pip
       # invocation and no reliance on the runner's global site-packages.
