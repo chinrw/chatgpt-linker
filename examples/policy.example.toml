@@ -1,0 +1,13 @@
+# Copy outside the source repository and replace the absolute root yourself.
+version = 1
+project_root = "/absolute/path/to/project"
+allowed_globs = ["PLAN.md", "src/*.py", "tests/*.py"]
+auto_publish = false
+redact_emails = true
+redact_private_ips = true
+ttl_hours = 24
+block_literals = []
+
+# [[redactions]]
+# literal = "private-service-name"
+# replacement = "<INTERNAL_SERVICE>"

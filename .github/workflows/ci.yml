@@ -1,0 +1,57 @@
+name: CI
+
+# The suite is offline and credential-free: standard library only, no network,
+# no model API, no real ChatGPT session. Anything that needs a live account is
+# deliberately out of scope here.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ['3.11', '3.12', '3.13']
+        exclude:
+          # One macOS leg is enough to catch POSIX differences.
+          - os: macos-latest
+            python-version: '3.11'
+    steps:
+      - name: Check out the release snapshot
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Byte-compile source, tests and scripts
+        run: python -m compileall -q src tests scripts
+
+      - name: Syntax-check shell scripts
+        run: bash -n scripts/*.sh
+
+      - name: Run regression tests
+        env:
+          PYTHONPATH: src
+        run: python -m unittest discover -s tests -v
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      # uv builds in an isolated environment from pyproject.toml; no direct pip
+      # invocation and no reliance on the runner's global site-packages.
+      - name: Build wheel from source
+        run: uv build --wheel --out-dir dist
+
+  # Publishing to a real GitHub repository is intentionally manual: this
+  # repository never creates repositories or pushes on your behalf.
