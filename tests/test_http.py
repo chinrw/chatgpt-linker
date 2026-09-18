@@ -4,8 +4,8 @@ import threading
 
 from support import Fixture, REVIEW
 from test_protocol import request
-from plan_review_bridge.http_server import LocalHTTPServer
-from plan_review_bridge.protocol import MCPApplication
+from chatgpt_linker.http_server import LocalHTTPServer
+from chatgpt_linker.protocol import MCPApplication
 
 class HTTPTests(Fixture):
     def setUp(self):

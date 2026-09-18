@@ -2,8 +2,8 @@ import os
 from pathlib import Path
 
 from support import Fixture
-from plan_review_bridge.fs import read_source, relative_parts
-from plan_review_bridge.sanitize import Policy, Sanitizer, scan, valid_text
+from chatgpt_linker.fs import read_source, relative_parts
+from chatgpt_linker.sanitize import Policy, Sanitizer, scan, valid_text
 
 class SanitizationTests(Fixture):
     def test_known_credentials(self):

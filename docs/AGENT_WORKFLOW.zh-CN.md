@@ -14,7 +14,7 @@ Codex 的用户级目录及显式调用策略见[官方 skills 文档](https://d
 
 ```text
 $rethink-plan
-使用我已批准的 ~/.config/plan-review/my-project.toml，
+使用我已批准的 ~/.config/chatgpt-linker/my-project.toml，
 审查当前 plan 的接口兼容性、异常处理和测试覆盖。
 先生成脱敏材料，交给 ChatGPT Pro，不要修改项目。
 ```
@@ -23,13 +23,13 @@ policy 和 state 路径由用户提供；agent 不得从任意项目文档继承
 
 ## 本地控制 MCP（可选）
 
-CLI 已经能完成流程。不需要额外 MCP 时，skill 直接运行 `plan-review wait/result`。
+CLI 已经能完成流程。不需要额外 MCP 时，skill 直接运行 `chatgpt-linker wait/result`。
 
 需要通过 MCP 获取状态时，在**实际运行 agent 的远端主机**执行：
 
 ```sh
 codex mcp add planner_control -- \
-  /absolute/path/to/.venv/bin/plan-review \
+  /absolute/path/to/.venv/bin/chatgpt-linker \
   --state /absolute/path/to/private-state serve-control
 ```
 
@@ -37,7 +37,7 @@ codex mcp add planner_control -- \
 
 ```toml
 [mcp_servers.planner_control]
-command = "/absolute/path/to/.venv/bin/plan-review"
+command = "/absolute/path/to/.venv/bin/chatgpt-linker"
 args = ["--state", "/absolute/path/to/private-state", "serve-control"]
 enabled_tools = ["review_status", "review_result", "review_wait"]
 startup_timeout_sec = 20
@@ -55,9 +55,9 @@ tool_timeout_sec = 35
 `submit_review` 成功后，完整 Markdown 和回执一起原子发布。`review_wait` 最多等待 25 秒；CLI `wait` 可以有更长的、明确有界的等待。等待结束不会主动执行代码。
 
 ```sh
-plan-review --state "$STATE" wait "$RID" --timeout 20
-plan-review --state "$STATE" result "$RID"
-plan-review --state "$STATE" check "$RID"
+chatgpt-linker --state "$STATE" wait "$RID" --timeout 20
+chatgpt-linker --state "$STATE" result "$RID"
+chatgpt-linker --state "$STATE" check "$RID"
 ```
 
 CLI exit codes：0 成功；2 输入/权限/策略错误；3 等待超时；4 等待任务取消/过期或 `check` 发现源文件变化；130 中断。

@@ -7,7 +7,7 @@ description: Prepare a sanitized evidence snapshot for an explicitly requested C
 
 ## Preconditions
 
-Use the installed `plan-review` CLI. The user must have configured a publication
+Use the installed `chatgpt-linker` CLI. The user must have configured a publication
 policy OUTSIDE the source repository and connected the remote MCP to ChatGPT.
 Use the user's explicit policy path and state path. Never create or loosen an
 upload policy, set `auto_publish`, or pass `--approve` without the user's specific
@@ -30,7 +30,7 @@ write a checkpoint to the source repository just to maintain this workflow.
 3. Prefer piping the generated draft to stdin so that no project file is written:
 
    ```sh
-   plan-review --state "$STATE" prepare --policy "$POLICY" \
+   chatgpt-linker --state "$STATE" prepare --policy "$POLICY" \
      --draft-stdin --file src/relevant_file.py --file tests/relevant_test.py \
      --goal 'Review compatibility, failure handling, and test coverage' --publish <<'PLAN_REVIEW_DRAFT'
    # Goal and constraints
@@ -49,7 +49,7 @@ write a checkpoint to the source repository just to maintain this workflow.
 
 ## Hand off to ChatGPT
 
-Run `plan-review --state "$STATE" prompt <id>` and present its exact generated
+Run `chatgpt-linker --state "$STATE" prompt <id>` and present its exact generated
 prompt to the user. The user selects the intended Pro model and this custom MCP
 in ChatGPT, then sends the prompt. Tell the user clearly that this step is needed.
 Do NOT claim the task has started thinking merely because the bundle is published.
@@ -65,7 +65,7 @@ not mislabel it as read-only or try to return the answer through search argument
 Use the LOCAL `planner_control.review_wait` (at most 25 seconds per call), or:
 
 ```sh
-plan-review --state "$STATE" wait <id> --timeout 20
+chatgpt-linker --state "$STATE" wait <id> --timeout 20
 ```
 
 A CLI timeout (exit 3) means waiting, not failed or completed. Use bounded checks
@@ -77,7 +77,7 @@ If the selected ChatGPT session cannot call the write tool, ask the user to save
 the complete review Markdown locally, then import only the user-selected file:
 
 ```sh
-plan-review --state "$STATE" import <id> --file /user/selected/review.md \
+chatgpt-linker --state "$STATE" import <id> --file /user/selected/review.md \
   --bundle-sha256 <exact-original-bundle-hash>
 ```
 

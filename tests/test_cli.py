@@ -64,7 +64,7 @@ class CLITests(Fixture):
     def test_misplaced_state_rejected_before_any_source_write(self):
         target=self.repo/'must-not-exist'
         import sys
-        p=subprocess.run([sys.executable,'-m','plan_review_bridge','--state',str(target),
+        p=subprocess.run([sys.executable,'-m','chatgpt_linker','--state',str(target),
                           'prepare','--policy',str(self.policy),'--plan','PLAN.md','--goal','Review'],
                          capture_output=True,text=True,env=self.env,timeout=10)
         self.assertEqual(p.returncode,2)

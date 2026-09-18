@@ -188,7 +188,7 @@ class MCPApplication:
                     raise RpcError(-32602, "initialize requires protocolVersion.")
                 result = {"protocolVersion": version if version in VERSIONS else VERSIONS[0],
                           "capabilities": {"tools": {"listChanged": False}},
-                          "serverInfo": {"name": "plan-review-control" if self.local else "plan-review-bridge", "version": __version__},
+                          "serverInfo": {"name": "chatgpt-linker-control" if self.local else "chatgpt-linker", "version": __version__},
                           "instructions": "Local status/result interface; do not fabricate ChatGPT completion." if self.local else INSTRUCTIONS}
                 if self.exchange:
                     result["capabilities"]["resources"] = {"subscribe": False, "listChanged": False}

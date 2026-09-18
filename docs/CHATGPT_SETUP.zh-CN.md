@@ -15,8 +15,8 @@
 完成 README 的安装、`init`、合成任务 `prepare` / `publish`。确认：
 
 ```sh
-plan-review doctor
-plan-review status '<真实 request_id>'
+chatgpt-linker doctor
+chatgpt-linker status '<真实 request_id>'
 ```
 
 状态应为 `waiting_for_chatgpt`。`doctor` 只检查本地情况，不会宣称已经连上 ChatGPT。
@@ -24,10 +24,10 @@ plan-review status '<真实 request_id>'
 创建一个空的私有 HOME，然后复制 launcher 到仓库外：
 
 ```sh
-mkdir -p "$HOME/.config/plan-review/empty-home"
-chmod 700 "$HOME/.config/plan-review" "$HOME/.config/plan-review/empty-home"
-cp scripts/tunnel-launcher.example.sh "$HOME/.config/plan-review/tunnel-launcher.sh"
-chmod 700 "$HOME/.config/plan-review/tunnel-launcher.sh"
+mkdir -p "$HOME/.config/chatgpt-linker/empty-home"
+chmod 700 "$HOME/.config/chatgpt-linker" "$HOME/.config/chatgpt-linker/empty-home"
+cp scripts/tunnel-launcher.example.sh "$HOME/.config/chatgpt-linker/tunnel-launcher.sh"
+chmod 700 "$HOME/.config/chatgpt-linker/tunnel-launcher.sh"
 ```
 
 编辑 launcher 的三个固定绝对路径：
@@ -56,12 +56,12 @@ tunnel-client help quickstart
 
 ```sh
 tunnel-client init --sample sample_mcp_stdio_local \
-  --profile plan-review \
+  --profile chatgpt-linker \
   --tunnel-id '<真实 tunnel_id>' \
   --mcp-command '/absolute/path/to/tunnel-launcher.sh'
 
-tunnel-client doctor --profile plan-review --explain
-tunnel-client run --profile plan-review
+tunnel-client doctor --profile chatgpt-linker --explain
+tunnel-client run --profile chatgpt-linker
 ```
 
 Tunnel 客户端需要访问 OpenAI 的出站 HTTPS；不需要给这台开发机开放公网入站端口。它必须保持运行，工具发现与调用才能完成。[1]
@@ -72,7 +72,7 @@ Tunnel 客户端需要访问 OpenAI 的出站 HTTPS；不需要给这台开发�
 
 按当前官方教程：Settings → Security and login → Developer mode。随后在 Plugins 页面点击加号创建 developer-mode app，Connection 选择 **Tunnel**，选中刚创建的 tunnel 或填写其 ID。[2]
 
-名称建议 `Plan Review Bridge`。完成后检查发现的工具及权限：
+名称建议 `ChatGPT Linker`。完成后检查发现的工具及权限：
 
 ```text
 search          readOnlyHint = true
@@ -86,7 +86,7 @@ submit_review   readOnlyHint = false
 
 ## 4. 必须执行的真实账号验收
 
-准备一份**新的合成任务**，执行 `plan-review prompt <id>`，把生成的短提示发送到刚建立的 ChatGPT Pro 会话。
+准备一份**新的合成任务**，执行 `chatgpt-linker prompt <id>`，把生成的短提示发送到刚建立的 ChatGPT Pro 会话。
 
 验收顺序：
 
@@ -107,7 +107,7 @@ submit_review   readOnlyHint = false
 让 ChatGPT 输出同一份 Markdown，然后保存到你选择的本地文件：
 
 ```sh
-plan-review import '<request_id>' --file /absolute/path/to/review.md \
+chatgpt-linker import '<request_id>' --file /absolute/path/to/review.md \
   --bundle-sha256 '<该任务的原始 bundle_sha256>'
 ```
 
@@ -122,7 +122,7 @@ plan-review import '<request_id>' --file /absolute/path/to/review.md \
 需要更强隔离时，请用你自己的沙箱运行**同一条**命令：
 
 ```sh
-exec <你的沙箱> -- /absolute/path/to/.venv/bin/plan-review serve --exchange <EXCHANGE>
+exec <你的沙箱> -- /absolute/path/to/.venv/bin/chatgpt-linker serve --exchange <EXCHANGE>
 ```
 
 只把 exchange 挂进去；源仓库、private provenance、HOME、SSH agent、云凭据和 Docker socket 都不要挂。UID 与目录权限（exchange 需属于运行 UID 且 mode 0700，否则 `UNSAFE_STATE`）必须自行验证——**本项目不附带容器配方，也不对任何第三方沙箱配置的正确性负责**。

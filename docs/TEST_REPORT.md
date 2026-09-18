@@ -24,7 +24,7 @@ uv venv <tmp> && uv pip install --no-index <built wheel>
 wheel 安装到**全新虚拟环境**后，用安装出的 console script（不使用源码 PYTHONPATH）执行：
 
 ```text
-plan-review --version → 0.1.0
+chatgpt-linker --version → 0.1.0
 init → policy-init → prepare → publish → prompt
 import（合成人工回执）→ wait → result        回执 source=manual_import
 ```
@@ -32,7 +32,7 @@ import（合成人工回执）→ wait → result        回执 source=manual_im
 同一次还用一个**合成 MCP 客户端**通过真实 stdio 子进程验证远程面：
 
 ```text
-initialize → plan-review-bridge 0.1.0，协议 2025-11-25
+initialize → chatgpt-linker 0.1.0，协议 2025-11-25
 tools/list → 仅 fetch / search / submit_review；submit_review 无 path 参数
 fetch <request_id>:request、search、fetch 传绝对路径 → 被拒绝
 submit_review → completed，回执 source=mcp_submit

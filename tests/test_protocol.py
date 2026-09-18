@@ -3,7 +3,7 @@ import json
 import subprocess
 
 from support import Fixture, REVIEW
-from plan_review_bridge.protocol import MCPApplication, RpcError, encode, loads, serve_stdio
+from chatgpt_linker.protocol import MCPApplication, RpcError, encode, loads, serve_stdio
 
 
 def request(method, params=None, identifier=1):
@@ -114,7 +114,7 @@ class ProtocolTests(Fixture):
         self.assertEqual(self.store.result(self.rid)['status'], 'completed')
 
     def test_oversize_stdio_is_bounded_and_closes(self):
-        from plan_review_bridge.protocol import MAX_MESSAGE
+        from chatgpt_linker.protocol import MAX_MESSAGE
         target = io.BytesIO()
         serve_stdio(self.app, io.BytesIO(b'x'*(MAX_MESSAGE+1)+b'\n'), target)
         self.assertLess(len(target.getvalue()), 300)

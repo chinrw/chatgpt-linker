@@ -2,7 +2,7 @@
 # Create a NEW PRIVATE repository from a source-only snapshot. Never force-push.
 set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-TARGET="${1:-chinrw/plan-review-bridge}"
+TARGET="${1:-chinrw/chatgpt-linker}"
 if [[ $# -gt 1 || ! "$TARGET" =~ ^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
   echo 'Usage: bash scripts/publish-github.sh [owner/new-repository-name]' >&2; exit 2
 fi
@@ -20,7 +20,7 @@ if [[ "${TARGET%%/*}" != "$LOGIN" ]]; then
 fi
 ACCOUNT_ID="$(gh api user --jq .id)"
 [[ "$ACCOUNT_ID" =~ ^[0-9]+$ ]] || { echo 'Invalid authenticated account metadata.' >&2; exit 2; }
-TMP="$(mktemp -d "${TMPDIR:-/tmp}/plan-review-publish.XXXXXX")"
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/chatgpt-linker-publish.XXXXXX")"
 trap 'rm -rf -- "$TMP"' EXIT
 if gh api "repos/$TARGET" >"$TMP/repo.json" 2>"$TMP/lookup.err"; then
   echo 'Refusing: target repository already exists. Nothing was pushed or overwritten.' >&2; exit 2

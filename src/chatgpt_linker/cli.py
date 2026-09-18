@@ -18,10 +18,10 @@ from .store import Exchange, LocalStore
 
 
 def default_state() -> Path:
-    override = os.environ.get("PLAN_REVIEW_STATE")
+    override = os.environ.get("CHATGPT_LINKER_STATE")
     if override:
         return Path(override).expanduser()
-    return Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))) / "plan-review"
+    return Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))) / "chatgpt-linker"
 
 
 def emit(value: dict) -> None:

@@ -48,7 +48,7 @@ case "$1 $2" in
  'api user')
   if [ "$4" = .login ]; then echo chinrw; else echo 16910912; fi
   exit 0 ;;
- 'api repos/chinrw/plan-review-bridge')
+ 'api repos/chinrw/chatgpt-linker')
   case "$MOCK_MODE" in
     exists) echo '{}'; exit 0 ;;
     network) echo 'connection failed' >&2; exit 1 ;;
@@ -70,7 +70,7 @@ exec "{sys.executable}" "$@"
         return {**os.environ,'PATH':str(self.bin)+os.pathsep+os.environ['PATH'],
                 'MOCK_LOG':str(self.log),'PYTHON':str(wrapper)}
 
-    def publish_mock(self,mode,target='chinrw/plan-review-bridge'):
+    def publish_mock(self,mode,target='chinrw/chatgpt-linker'):
         env=self.setup_publish_mocks()
         return subprocess.run(['bash',str(ROOT/'scripts/publish-github.sh'),target],
                      capture_output=True,text=True,env={**env,'MOCK_MODE':mode},timeout=20)
@@ -99,7 +99,7 @@ exec "{sys.executable}" "$@"
         result=self.publish_mock('normal')
         self.assertEqual(result.returncode,0,result.stderr)
         log=self.log.read_text()
-        self.assertIn('repo create chinrw/plan-review-bridge --private',log)
+        self.assertIn('repo create chinrw/chatgpt-linker --private',log)
         self.assertNotIn('--public',log)
         self.assertNotIn('--force',log)
         self.assertIn('mock://not-a-real-created-repository',result.stdout)

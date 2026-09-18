@@ -1,4 +1,4 @@
-# Plan Review Bridge
+# ChatGPT Linker
 
 **让本地 agent 准备证据，让你在 ChatGPT 中使用 Pro 重新思考计划，再把完整 Markdown 自动交回本地 agent。**
 
@@ -38,14 +38,14 @@ $rethink-plan
 ```sh
 uv venv .venv
 uv pip install --python .venv/bin/python .
-.venv/bin/plan-review --version
+.venv/bin/chatgpt-linker --version
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 
 没有 `uv` 时，等价的 `python3 -m venv` + `pip install .` 同样可用。运行时无第三方依赖；构建阶段需要 setuptools。完全离线时不需要安装：
 
 ```sh
-PYTHONPATH="$PWD/src" python3 -m plan_review_bridge --help
+PYTHONPATH="$PWD/src" python3 -m chatgpt_linker --help
 ```
 
 不要把虚拟环境、真实 policy、任务状态或 tunnel 密钥提交到 Git。
@@ -55,16 +55,16 @@ PYTHONPATH="$PWD/src" python3 -m plan_review_bridge --help
 下面所有源文件都来自 `examples/demo`，没有真实项目数据。`--state` 是全局参数，必须放在子命令前。保存状态的位置必须在被审查项目之外。
 
 ```sh
-export PLAN_REVIEW_STATE="$HOME/.local/state/plan-review"
-POLICY="$HOME/.config/plan-review/demo.toml"
+export CHATGPT_LINKER_STATE="$HOME/.local/state/chatgpt-linker"
+POLICY="$HOME/.config/chatgpt-linker/demo.toml"
 
-plan-review init
-plan-review policy-init \
+chatgpt-linker init
+chatgpt-linker policy-init \
   --repo "$PWD/examples/demo" \
   --output "$POLICY" \
   --allow 'PLAN.md' --allow 'demo.py'
 
-plan-review prepare --policy "$POLICY" \
+chatgpt-linker prepare --policy "$POLICY" \
   --plan PLAN.md --file demo.py \
   --goal '检查 greeting 配置方案的兼容性、边界行为和测试覆盖'
 ```
@@ -74,8 +74,8 @@ plan-review prepare --policy "$POLICY" \
 ```sh
 RID='<上一步生成的 request_id>'
 SHA='<上一步生成的 bundle_sha256>'
-plan-review publish "$RID" --approve
-plan-review prompt "$RID"
+chatgpt-linker publish "$RID" --approve
+chatgpt-linker prompt "$RID"
 ```
 
 `--approve` 是你对本次外发材料的批准。日常使用时，可以由你在可信 policy 中开启 `auto_publish = true`；之后 agent 在该范围内使用 `prepare --publish`。不要让 agent 自行扩大范围。
@@ -83,10 +83,10 @@ plan-review prompt "$RID"
 ### 先测试本地回传，不假装调用了 ChatGPT
 
 ```sh
-plan-review import "$RID" \
+chatgpt-linker import "$RID" \
   --file "$PWD/examples/demo/REVIEW.md" --bundle-sha256 "$SHA"
-plan-review wait "$RID" --timeout 0
-plan-review result "$RID"
+chatgpt-linker wait "$RID" --timeout 0
+chatgpt-linker result "$RID"
 ```
 
 这是**合成、人工导入的 smoke test**，回执会记录 `manual_import`。随后准备一个**新任务**用于真实 ChatGPT 测试；已经完成的任务不可用不同内容覆盖。
@@ -98,7 +98,7 @@ plan-review result "$RID"
 推荐：在本地主机运行 OpenAI 官方 `tunnel-client`，经 stdio 接入：
 
 ```sh
-/absolute/path/to/.venv/bin/plan-review serve \
+/absolute/path/to/.venv/bin/chatgpt-linker serve \
   --exchange /absolute/path/to/state/exchange
 ```
 
@@ -109,7 +109,7 @@ plan-review result "$RID"
 连接后，工具清单应只有 `search`、`fetch`、`submit_review`。在 ChatGPT 中选择 Pro，发送 `prompt "$RID"` 的结果。调用成功后：
 
 ```sh
-plan-review wait "$RID" --timeout 1200
+chatgpt-linker wait "$RID" --timeout 1200
 ```
 
 返回的 `artifact_path` 指向固定 `review.md`，同时包含 SHA-256 回执和已选源文件的漂移检查。`wait` 只观察本地文件，不访问 ChatGPT。

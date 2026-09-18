@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "plan-review-bridge"
+name = "chatgpt-linker"
 version = "0.1.0"
 description = "Project-read-only plan review handoffs to ChatGPT with a narrowly scoped MCP result inbox"
 readme = "README.md"
@@ -17,7 +17,7 @@ classifiers = [
 ]
 
 [project.scripts]
-plan-review = "plan_review_bridge.cli:main"
+chatgpt-linker = "chatgpt_linker.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

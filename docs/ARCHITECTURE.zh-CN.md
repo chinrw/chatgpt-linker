@@ -5,7 +5,7 @@
 这是一个单用户、私有连接的 Python 程序。无需模型 API，也没有常驻模型调度器。进程分为本地 CLI、远程证据 MCP，以及可选本地控制 MCP；复用同一存储层。
 
 ```text
-src/plan_review_bridge/
+src/chatgpt_linker/
   fs.py            openat/no-follow、私有权限、原子写入和文件锁
   sanitize.py      可信 TOML policy、材料过滤和本地脱敏
   store.py         冻结包、授权、引用、固定结果、状态与来源漂移
@@ -85,10 +85,10 @@ HTTP 是无状态 JSON 响应模式：POST /mcp，通知返回 202；GET/DELETE 
 ## 本地 HTTP 调试
 
 ```sh
-plan-review http-token --output "$HOME/.config/plan-review/http-token"
-plan-review serve --exchange "$HOME/.local/state/plan-review/exchange" \
+chatgpt-linker http-token --output "$HOME/.config/chatgpt-linker/http-token"
+chatgpt-linker serve --exchange "$HOME/.local/state/chatgpt-linker/exchange" \
   --transport http --port 8766 \
-  --token-file "$HOME/.config/plan-review/http-token"
+  --token-file "$HOME/.config/chatgpt-linker/http-token"
 ```
 
 本地客户端必须提供 `Authorization: Bearer <本地 token>`、JSON Content-Type，以及同时接受 application/json 与 text/event-stream。token 不放 URL 或日志。正式 ChatGPT 接入优先使用官方 Tunnel 的 stdio。

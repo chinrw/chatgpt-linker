@@ -5,9 +5,9 @@ import time
 from unittest.mock import patch
 
 from support import Fixture, REVIEW
-from plan_review_bridge.errors import BridgeError
-from plan_review_bridge.fs import atomic_write, canonical, read_json
-from plan_review_bridge.store import Exchange, LocalStore
+from chatgpt_linker.errors import BridgeError
+from chatgpt_linker.fs import atomic_write, canonical, read_json
+from chatgpt_linker.store import Exchange, LocalStore
 
 class StoreTests(Fixture):
     def test_requires_publication_approval(self):
@@ -28,7 +28,7 @@ class StoreTests(Fixture):
         self.assertBridge('POLICY_CHANGED', self.store.publish, task['request_id'], approve=True)
 
     def test_capture_detects_concurrent_changes(self):
-        from plan_review_bridge.store import read_source as actual
+        from chatgpt_linker.store import read_source as actual
         calls = 0
         def modified(root, name, limit):
             nonlocal calls
@@ -37,7 +37,7 @@ class StoreTests(Fixture):
                 if calls == 2:
                     (self.repo / 'code.py').write_text('changed\n')
             return actual(root, name, limit)
-        with patch('plan_review_bridge.store.read_source', side_effect=modified):
+        with patch('chatgpt_linker.store.read_source', side_effect=modified):
             self.assertBridge('SOURCE_CHANGED', self.prepare)
 
     def test_source_changed_before_publish(self):
@@ -152,7 +152,7 @@ class StoreTests(Fixture):
 
     def test_failed_atomic_result_does_not_complete(self):
         rid, sha = self.published()
-        with patch('plan_review_bridge.store.os.rename', side_effect=OSError('synthetic crash')):
+        with patch('chatgpt_linker.store.os.rename', side_effect=OSError('synthetic crash')):
             with self.assertRaises(OSError):
                 self.store.exchange.submit(rid, sha, REVIEW)
         self.assertEqual(self.store.status(rid)['status'], 'waiting_for_chatgpt')
@@ -201,7 +201,7 @@ class StoreTests(Fixture):
 
     def test_expiry_revokes_remote_access(self):
         rid, sha = self.published()
-        with patch('plan_review_bridge.store.time.time', return_value=time.time()+200000):
+        with patch('chatgpt_linker.store.time.time', return_value=time.time()+200000):
             self.assertEqual(self.store.status(rid)['status'], 'expired')
             self.assertBridge('UNAVAILABLE', self.store.exchange.fetch, rid + ':request')
             self.assertBridge('UNAVAILABLE', self.store.exchange.submit, rid, sha, REVIEW)
@@ -209,7 +209,7 @@ class StoreTests(Fixture):
     def test_completed_local_result_survives_expiry(self):
         rid, sha = self.published()
         self.store.exchange.submit(rid, sha, REVIEW)
-        with patch('plan_review_bridge.store.time.time', return_value=time.time()+200000):
+        with patch('chatgpt_linker.store.time.time', return_value=time.time()+200000):
             self.assertEqual(self.store.result(rid)['status'], 'completed')
             self.assertBridge('UNAVAILABLE', self.store.exchange.fetch, rid + ':request')
 

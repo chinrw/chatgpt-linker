@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from plan_review_bridge.store import LocalStore
+from chatgpt_linker.store import LocalStore
 
 ROOT = Path(__file__).resolve().parents[1]
 REVIEW = '''## Summary
@@ -34,7 +34,7 @@ class Fixture(unittest.TestCase):
         self.write_policy()
         self.store = LocalStore(self.base / 'state', create=True)
         self.env = {**os.environ, 'PYTHONPATH': str(ROOT / 'src')}
-        self.command = [sys.executable, '-m', 'plan_review_bridge', '--state', str(self.store.root)]
+        self.command = [sys.executable, '-m', 'chatgpt_linker', '--state', str(self.store.root)]
 
     def tearDown(self):
         self.temp.cleanup()
@@ -54,7 +54,7 @@ class Fixture(unittest.TestCase):
         return task['request_id'], task['bundle_sha256']
 
     def assertBridge(self, code, func, *args, **kwargs):
-        from plan_review_bridge.errors import BridgeError
+        from chatgpt_linker.errors import BridgeError
         with self.assertRaises(BridgeError) as cm:
             func(*args, **kwargs)
         self.assertEqual(cm.exception.code, code)
