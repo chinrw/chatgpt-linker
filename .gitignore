@@ -22,3 +22,6 @@ htmlcov/
 
 # Editor and OS noise.
 .DS_Store
+
+# Nix build output.
+result

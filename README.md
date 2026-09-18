@@ -50,6 +50,16 @@ PYTHONPATH="$PWD/src" python3 -m chatgpt_linker --help
 
 不要把虚拟环境、真实 policy、任务状态或 tunnel 密钥提交到 Git。
 
+### Nix
+
+仓库是一个 flake：`packages.default` 是 CLI，`nix flake check` 在沙箱里跑全部单元测试，`nix develop` 给 python + uv。
+
+```sh
+nix run github:chinrw/chatgpt-linker -- --version
+```
+
+在 home-manager 里作为 input 使用：把 `inputs.chatgpt-linker.packages.${system}.default` 加进 `home.packages`，把 `${inputs.chatgpt-linker}/skills/rethink-plan` 链接到各 agent 的 skill 目录。Codex、Claude Code 的 MCP 注册和 tunnel-client 的 `mcp.commands` 用稳定路径 `~/.nix-profile/bin/chatgpt-linker`，升级后不用改。
+
 ## 第一次：用仓库内的合成示例
 
 下面所有源文件都来自 `examples/demo`，没有真实项目数据。`--state` 是全局参数，必须放在子命令前。保存状态的位置必须在被审查项目之外。
