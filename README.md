@@ -122,7 +122,7 @@ chatgpt-linker result "$RID"
 连接后，工具清单应只有 `search`、`fetch`、`submit_review`。在 ChatGPT 中选择 Pro，发送 `prompt "$RID"` 的结果。调用成功后：
 
 ```sh
-chatgpt-linker wait "$RID" --timeout 1200
+chatgpt-linker wait "$RID" --timeout 5400
 ```
 
 返回的 `artifact_path` 指向固定 `review.md`，同时包含 SHA-256 回执和已选源文件的漂移检查。`wait` 只观察本地文件，不访问 ChatGPT。

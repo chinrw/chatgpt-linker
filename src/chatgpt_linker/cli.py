@@ -59,7 +59,8 @@ def parser() -> argparse.ArgumentParser:
         s.add_argument("request_id")
     wait = sub.add_parser("wait", help="Wait only on local storage; exit 3 on timeout")
     wait.add_argument("request_id")
-    wait.add_argument("--timeout", type=float, default=1200)
+    # 90 min: one ChatGPT Pro reasoning pass can run close to an hour.
+    wait.add_argument("--timeout", type=float, default=5400)
     wait.add_argument("--interval", type=float, default=1)
     imp = sub.add_parser("import", help="Manual fallback when ChatGPT cannot call the write tool")
     imp.add_argument("request_id")

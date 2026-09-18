@@ -11,6 +11,11 @@ Renamed the project from Plan Review Bridge to ChatGPT Linker. User-visible chan
 - MCP `serverInfo.name` is now `chatgpt-linker` / `chatgpt-linker-control`.
 - The agent skill keeps its name `rethink-plan`.
 
+Waiting covers a full Pro reasoning pass:
+
+- The skill's default polling budget is 90 minutes (was 20); the invocation can
+  name a different one. CLI `wait --timeout` defaults to 5400 seconds (was 1200).
+
 Selection is more automatic:
 
 - `prepare --auto` freezes every policy-allowed text file; `--glob` narrows it.

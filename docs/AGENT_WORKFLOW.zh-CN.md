@@ -52,10 +52,10 @@ tool_timeout_sec = 330
 
 `prepare` 返回 task ID；`publish` 把它变成 `waiting_for_chatgpt`。这仅表示材料可读。用户还没有发送 ChatGPT 提示时，不能说 Pro 已经在复审。
 
-`submit_review` 成功后，完整 Markdown 和回执一起原子发布。`review_wait` 单次最多 300 秒，结果一出现立即返回；skill 默认从交接起持续轮询 20 分钟，中途不向用户确认，只在 `completed`、`cancelled`、`expired` 或预算用尽时停下并报出 request ID。CLI `wait` 可以有更长的、明确有界的等待。等待结束不会主动执行代码。
+`submit_review` 成功后，完整 Markdown 和回执一起原子发布。`review_wait` 单次最多 300 秒，结果一出现立即返回；skill 默认从交接起持续轮询 90 分钟（Pro 一次推理可能接近 1 小时；在调用时写明「最多等 N 小时」可覆盖），中途不向用户确认，只在 `completed`、`cancelled`、`expired` 或预算用尽时停下并报出 request ID。CLI `wait` 可以有更长的、明确有界的等待。等待结束不会主动执行代码。
 
 ```sh
-chatgpt-linker --state "$STATE" wait "$RID" --timeout 20
+chatgpt-linker --state "$STATE" wait "$RID" --timeout 5400
 chatgpt-linker --state "$STATE" result "$RID"
 chatgpt-linker --state "$STATE" check "$RID"
 ```
