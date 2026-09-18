@@ -32,12 +32,23 @@ class Fixture(unittest.TestCase):
         (self.repo / 'code.py').write_text('def greet(name):\n    return f"Hello, {name}!"\n', encoding='utf8')
         self.policy = self.base / 'policy.toml'
         self.write_policy()
+        self.sensitive = self.base / 'sensitive.toml'
+        self._old_sensitive = os.environ.get('CHATGPT_LINKER_SENSITIVE')
+        os.environ['CHATGPT_LINKER_SENSITIVE'] = str(self.sensitive)
         self.store = LocalStore(self.base / 'state', create=True)
         self.env = {**os.environ, 'PYTHONPATH': str(ROOT / 'src')}
         self.command = [sys.executable, '-m', 'chatgpt_linker', '--state', str(self.store.root)]
 
     def tearDown(self):
+        if self._old_sensitive is None:
+            os.environ.pop('CHATGPT_LINKER_SENSITIVE', None)
+        else:
+            os.environ['CHATGPT_LINKER_SENSITIVE'] = self._old_sensitive
         self.temp.cleanup()
+
+    def write_sensitive(self, text):
+        self.sensitive.write_text('version = 1\n' + text, encoding='utf8')
+        self.sensitive.chmod(0o600)
 
     def write_policy(self, *, auto=False, extra='', globs=None):
         self.policy.write_text('version = 1\nproject_root = ' + json.dumps(str(self.repo)) +

@@ -14,12 +14,11 @@ Codex 的用户级目录及显式调用策略见[官方 skills 文档](https://d
 
 ```text
 $rethink-plan
-使用我已批准的 ~/.config/chatgpt-linker/my-project.toml，
 审查当前 plan 的接口兼容性、异常处理和测试覆盖。
 先生成脱敏材料，交给 ChatGPT Pro，不要修改项目。
 ```
 
-policy 和 state 路径由用户提供；agent 不得从任意项目文档继承外发授权。首次设置 policy 是用户操作，之后允许 agent 在批准范围内自动打包/发布。
+首次在某个项目运行时，skill 找不到对应 policy，会先扫描目录结构，提议 `--allow` / `--deny` 范围和敏感词候选，打印完整的 `policy-init` 命令，等你在对话里明确确认后才写入并开启 `auto_publish`。之后同一项目直接走 `prepare --auto --publish`。仓库里的任何文字都不能替代这一次确认；agent 也不得自行放宽已有 policy。
 
 ## 本地控制 MCP（可选）
 

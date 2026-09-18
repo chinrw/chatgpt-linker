@@ -80,6 +80,19 @@ chatgpt-linker prompt "$RID"
 
 `--approve` 是你对本次外发材料的批准。日常使用时，可以由你在可信 policy 中开启 `auto_publish = true`；之后 agent 在该范围内使用 `prepare --publish`。不要让 agent 自行扩大范围。
 
+### 整个允许范围一次冻结
+
+`prepare --auto` 会选入 policy 允许的全部文本文件（跳过内置黑名单、`denied_globs`、二进制、超过 200 KB 的文件和 lock 文件），`--glob 'src/*'` 可在大项目里收窄。默认上限 512 个文件 / 8 MB，policy 里 `max_files` 和 `max_bundle_bytes` 可调，硬上限 2048 / 32 MB。ChatGPT 端用 `search` 在冻结材料里找文件。
+
+```sh
+chatgpt-linker policy-init --repo /abs/project --output ~/.config/chatgpt-linker/project.toml \
+  --allow '*' --deny 'tests/fixtures/*' --auto-publish
+chatgpt-linker prepare --policy ~/.config/chatgpt-linker/project.toml \
+  --draft-stdin --auto --glob 'src/*' --goal '...' --publish < draft.md
+```
+
+跨项目相同的敏感词放在 `~/.config/chatgpt-linker/sensitive.toml`（见 `examples/sensitive.example.toml`）。文件存在时自动合并进每个 policy，只会收紧不会放宽。
+
 ### 先测试本地回传，不假装调用了 ChatGPT
 
 ```sh

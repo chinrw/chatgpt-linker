@@ -11,6 +11,17 @@ Renamed the project from Plan Review Bridge to ChatGPT Linker. User-visible chan
 - MCP `serverInfo.name` is now `chatgpt-linker` / `chatgpt-linker-control`.
 - The agent skill keeps its name `rethink-plan`.
 
+Selection is more automatic:
+
+- `prepare --auto` freezes every policy-allowed text file; `--glob` narrows it.
+  Binary, oversized, lock, and cache files are skipped and reported.
+- Policy gains `denied_globs`, `max_files` (default 512, ceiling 2048) and
+  `max_bundle_bytes` (default 8 MB, ceiling 32 MB); `policy-init --deny` writes the deny list.
+- `~/.config/chatgpt-linker/sensitive.toml` (or `CHATGPT_LINKER_SENSITIVE`) is merged
+  into every policy: global redactions and block literals, never wider scope.
+- The `rethink-plan` skill proposes the policy on first use in a project and
+  writes it only after an explicit confirmation in the conversation.
+
 Waiting is more automatic:
 
 - `review_wait` accepts `timeout_seconds` up to 300 (was 25) and still returns as soon as

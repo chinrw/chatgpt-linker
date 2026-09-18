@@ -13,6 +13,7 @@ from typing import BinaryIO
 
 from . import __version__
 from .errors import BridgeError
+from .sanitize import MAX_FILES
 from .store import Exchange, LocalStore, split_id
 
 MAX_MESSAGE = 1_048_576
@@ -50,7 +51,7 @@ def remote_tools(read_only: bool) -> list[dict]:
         tool("search", "Search approved evidence. Begin query with the exact request ID, then optional literal terms. "
              "Use returned next_cursor for additional results. This cannot find arbitrary projects.",
              {"query": string("Example: pr_<24 hex characters> retry", 512),
-              "cursor": {"type": "integer", "minimum": 0, "maximum": 65, "default": 0}}, ["query"]),
+              "cursor": {"type": "integer", "minimum": 0, "maximum": MAX_FILES + 1, "default": 0}}, ["query"]),
         tool("fetch", "Read a request index or evidence by its returned ID. Use next_start_line to continue. "
              "First read <request_id>:request. No filesystem paths or arbitrary URLs are accepted.",
              {"id": string("Exact <request_id>:request or <request_id>:d0001", 80),

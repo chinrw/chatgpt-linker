@@ -16,7 +16,7 @@ from pathlib import Path, PurePosixPath
 
 from .errors import BridgeError
 
-MAX_JSON = 4 * 1024 * 1024
+MAX_JSON = 48 * 1024 * 1024  # must exceed MAX_BUNDLE_BYTES plus JSON framing
 
 
 def canonical(value: object) -> bytes:

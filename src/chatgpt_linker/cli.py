@@ -38,6 +38,7 @@ def parser() -> argparse.ArgumentParser:
     policy.add_argument("--repo", type=Path, required=True)
     policy.add_argument("--output", type=Path, required=True)
     policy.add_argument("--allow", action="append", required=True, help="Approved relative path glob; repeatable")
+    policy.add_argument("--deny", action="append", default=[], help="Relative path glob excluded even when allowed; repeatable")
     policy.add_argument("--auto-publish", action="store_true", help="Authorize future selected inputs within this scope")
     prep = sub.add_parser("prepare", help="Scan and freeze explicitly selected evidence")
     prep.add_argument("--policy", type=Path, required=True)
@@ -45,6 +46,8 @@ def parser() -> argparse.ArgumentParser:
     plan.add_argument("--plan", help="Existing relative plan path inside the approved project")
     plan.add_argument("--draft-stdin", action="store_true", help="Read an agent-generated draft from stdin; never write it to the repo")
     prep.add_argument("--file", action="append", default=[], help="Exact approved relative file; repeatable")
+    prep.add_argument("--auto", action="store_true", help="Also select every policy-allowed text file under the project")
+    prep.add_argument("--glob", action="append", default=[], help="Narrow --auto to matching relative paths; repeatable")
     prep.add_argument("--goal", required=True)
     prep.add_argument("--publish", action="store_true", help="Publish only if policy auto_publish is true")
     pub = sub.add_parser("publish", help="Publish a frozen task and grant the private MCP access")
@@ -85,6 +88,7 @@ def run(args: argparse.Namespace) -> int:
         private_dir(output.parent)
         content = ("version = 1\n" + f"project_root = {json.dumps(str(repo))}\n" +
                    f"allowed_globs = {json.dumps(args.allow)}\n" +
+                   f"denied_globs = {json.dumps(args.deny)}\n" +
                    f"auto_publish = {str(args.auto_publish).lower()}\n" +
                    "redact_emails = true\nredact_private_ips = true\nttl_hours = 24\nblock_literals = []\n")
         try:
@@ -148,10 +152,10 @@ def run(args: argparse.Namespace) -> int:
                 draft = raw.decode("utf-8")
             except (ValueError, UnicodeError) as exc:
                 raise BridgeError("INVALID_PLAN", "Draft must be bounded UTF-8 text.") from exc
-        prepared = store.prepare(args.policy, args.plan, args.file, args.goal, draft=draft)
+        prepared = store.prepare(args.policy, args.plan, args.file, args.goal, draft=draft, auto=args.auto, globs=args.glob)
         if args.publish:
             try:
-                prepared = store.publish(prepared["request_id"])
+                prepared = {**prepared, **store.publish(prepared["request_id"])}  # keep files/skipped visible
             except BridgeError as exc:
                 emit({**prepared, **exc.as_dict()})
                 return 2

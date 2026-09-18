@@ -16,9 +16,12 @@ from .errors import BridgeError
 from .fs import read_source, relative_parts
 
 MAX_FILE_BYTES = 200_000
-MAX_BUNDLE_BYTES = 1_000_000
-MAX_FILES = 64
 MAX_LINE_BYTES = 12_000
+# Hard ceilings enforced on both sides of the exchange; a policy may only lower them.
+MAX_FILES = 2048
+MAX_BUNDLE_BYTES = 32_000_000
+DEFAULT_MAX_FILES = 512
+DEFAULT_MAX_BUNDLE_BYTES = 8_000_000
 
 DENIED_PARTS = {".git", ".ssh", ".aws", ".azure", ".gnupg", "node_modules", ".venv",
                 "venv", "__pycache__", "dist", "build", "target", ".terraform"}
@@ -26,6 +29,11 @@ DENIED_NAMES = {"auth.json", "credentials", "credentials.json", "id_rsa", "id_ed
                 ".netrc", ".npmrc", ".pypirc", ".git-credentials", "kubeconfig"}
 DENIED_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".sqlite", ".sqlite3", ".db",
                    ".sql", ".log", ".csv", ".parquet", ".zip", ".gz", ".tar", ".7z"}
+# Skipped by automatic selection only; an explicit --file may still name them.
+AUTO_SKIP_PARTS = {".mypy_cache", ".pytest_cache", ".ruff_cache", ".tox", ".nox", ".eggs",
+                   ".cache", ".idea", ".vscode"}
+AUTO_SKIP_NAMES = {"package-lock.json", "yarn.lock", "pnpm-lock.yaml", "uv.lock", "poetry.lock",
+                   "cargo.lock", "gemfile.lock", "composer.lock", "go.sum"}
 
 # The scanner reports only category names, never matched bytes.
 SECRET_RULES = (
@@ -75,6 +83,66 @@ def valid_text(data: bytes) -> str:
     return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
+def sensitive_path() -> Path:
+    """Global sensitive-literal file, merged into every policy when present."""
+    override = os.environ.get("CHATGPT_LINKER_SENSITIVE")
+    if override:
+        return Path(override).expanduser()
+    config = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config")))
+    return config / "chatgpt-linker" / "sensitive.toml"
+
+
+def _trusted_toml(path: Path, allowed_keys: set[str]) -> dict:
+    raw, _ = read_source(path.parent.resolve(), path.name, 65536)
+    st = path.lstat()
+    if st.st_uid != os.getuid() or st.st_mode & 0o022:
+        raise BridgeError("UNSAFE_POLICY", "Policy must be owned by you and not writable by other users.")
+    obj = tomllib.loads(raw.decode("utf-8"))
+    if set(obj) - allowed_keys or obj.get("version") != 1:
+        raise ValueError()
+    return obj
+
+
+def _globs(value: object, *, required: bool) -> tuple[str, ...]:
+    if value is None and not required:
+        return ()
+    if (not isinstance(value, list) or (required and not value) or len(value) > 128 or
+            any(not isinstance(s, str) or not s or len(s) > 256 or s.startswith("/") or ".." in s.split("/") for s in value)):
+        raise ValueError()
+    return tuple(value)
+
+
+def _redactions(obj: dict) -> list[tuple[str, str]]:
+    redactions = obj.get("redactions", [])
+    if not isinstance(redactions, list) or len(redactions) > 128:
+        raise ValueError()
+    pairs = []
+    for r in redactions:
+        if not isinstance(r, dict) or set(r) != {"literal", "replacement"}:
+            raise ValueError()
+        a, b = r["literal"], r["replacement"]
+        if (not isinstance(a, str) or not a or not isinstance(b, str) or not b or
+                "\n" in a + b or len(a + b) > 1024):
+            raise ValueError()
+        pairs.append((a, b))
+    return pairs
+
+
+def _blocks(obj: dict) -> list[str]:
+    blocks = obj.get("block_literals", [])
+    if not isinstance(blocks, list) or len(blocks) > 128 or any(not isinstance(s, str) or not s or len(s) > 1024 for s in blocks):
+        raise ValueError()
+    return blocks
+
+
+def _bounded_int(value: object, default: int, ceiling: int) -> int:
+    if value is None:
+        return default
+    if type(value) is not int or not 1 <= value <= ceiling:
+        raise ValueError()
+    return value
+
+
 @dataclass(frozen=True)
 class Policy:
     project_root: Path
@@ -85,30 +153,25 @@ class Policy:
     replacements: tuple[tuple[str, str], ...] = ()
     block_literals: tuple[str, ...] = ()
     ttl_hours: int = 24
+    denied_globs: tuple[str, ...] = ()
+    max_files: int = DEFAULT_MAX_FILES
+    max_bundle_bytes: int = DEFAULT_MAX_BUNDLE_BYTES
 
     @classmethod
     def load(cls, path: Path) -> "Policy":
         path = path.expanduser().absolute()
         try:
-            raw, _ = read_source(path.parent.resolve(), path.name, 65536)
-            st = path.lstat()
-            if st.st_uid != os.getuid() or st.st_mode & 0o022:
-                raise BridgeError("UNSAFE_POLICY", "Policy must be owned by you and not writable by other users.")
-            obj = tomllib.loads(raw.decode("utf-8"))
-            allowed = {"version", "project_root", "allowed_globs", "auto_publish", "redact_emails",
-                       "redact_private_ips", "redactions", "block_literals", "ttl_hours"}
-            if set(obj) - allowed or obj.get("version") != 1:
-                raise ValueError()
+            obj = _trusted_toml(path, {"version", "project_root", "allowed_globs", "denied_globs", "auto_publish",
+                                       "redact_emails", "redact_private_ips", "redactions", "block_literals",
+                                       "ttl_hours", "max_files", "max_bundle_bytes"})
             root_value = obj["project_root"]
             if not isinstance(root_value, str) or not Path(root_value).expanduser().is_absolute():
                 raise ValueError()
             root = Path(root_value).expanduser().resolve(strict=True)
             if not root.is_dir() or path.resolve().is_relative_to(root):
                 raise BridgeError("UNTRUSTED_POLICY", "Keep the policy outside the project root.")
-            globs = obj["allowed_globs"]
-            if (not isinstance(globs, list) or not globs or len(globs) > 128 or
-                    any(not isinstance(s, str) or not s or len(s) > 256 or s.startswith("/") or ".." in s.split("/") for s in globs)):
-                raise ValueError()
+            globs = _globs(obj["allowed_globs"], required=True)
+            denied = _globs(obj.get("denied_globs"), required=False)
             opts = {k: obj.get(k, default) for k, default in
                     (("auto_publish", False), ("redact_emails", True), ("redact_private_ips", True))}
             if any(type(v) is not bool for v in opts.values()):
@@ -116,23 +179,15 @@ class Policy:
             ttl = obj.get("ttl_hours", 24)
             if type(ttl) is not int or not 1 <= ttl <= 168:
                 raise ValueError()
-            redactions = obj.get("redactions", [])
-            if not isinstance(redactions, list) or len(redactions) > 128:
-                raise ValueError()
-            pairs = []
-            for r in redactions:
-                if not isinstance(r, dict) or set(r) != {"literal", "replacement"}:
-                    raise ValueError()
-                a, b = r["literal"], r["replacement"]
-                if (not isinstance(a, str) or not a or not isinstance(b, str) or not b or
-                        "\n" in a + b or len(a + b) > 1024):
-                    raise ValueError()
-                pairs.append((a, b))
-            blocks = obj.get("block_literals", [])
-            if not isinstance(blocks, list) or len(blocks) > 128 or any(not isinstance(s, str) or not s or len(s) > 1024 for s in blocks):
-                raise ValueError()
-            return cls(root, tuple(globs), **opts, replacements=tuple(pairs),
-                       block_literals=tuple(blocks), ttl_hours=ttl)
+            pairs, blocks = _redactions(obj), _blocks(obj)
+            extra = sensitive_path()
+            if extra.is_file() or extra.is_symlink():
+                shared = _trusted_toml(extra, {"version", "block_literals", "redactions"})
+                pairs, blocks = pairs + _redactions(shared), blocks + _blocks(shared)
+            return cls(root, globs, **opts, replacements=tuple(pairs), block_literals=tuple(blocks), ttl_hours=ttl,
+                       denied_globs=denied,
+                       max_files=_bounded_int(obj.get("max_files"), DEFAULT_MAX_FILES, MAX_FILES),
+                       max_bundle_bytes=_bounded_int(obj.get("max_bundle_bytes"), DEFAULT_MAX_BUNDLE_BYTES, MAX_BUNDLE_BYTES))
         except (KeyError, ValueError, TypeError, OSError, UnicodeError) as exc:
             raise BridgeError("INVALID_POLICY", "Invalid policy; check the documented TOML schema.") from exc
 
@@ -142,8 +197,45 @@ class Policy:
         if (any(p in DENIED_PARTS for p in lower) or lower[-1] in DENIED_NAMES or
                 lower[-1].startswith(".env") or Path(lower[-1]).suffix in DENIED_SUFFIXES):
             raise BridgeError("EXCLUDED_FILE", "A selected file is excluded by the built-in policy.")
+        if any(fnmatch.fnmatchcase(name, g) for g in self.denied_globs):
+            raise BridgeError("EXCLUDED_FILE", "A selected file is excluded by the policy deny list.")
         if not any(fnmatch.fnmatchcase(name, g) for g in self.allowed_globs):
             raise BridgeError("OUT_OF_SCOPE", "A selected file is outside the approved path scope.")
+
+
+def select_files(policy: Policy, globs: list[str] | None = None) -> tuple[list[str], list[dict]]:
+    """Every policy-allowed text file under the root, optionally narrowed by globs.
+
+    Returns (sorted relative paths, skipped entries). Files outside the policy are
+    omitted silently; allowed files that cannot be published are reported.
+    """
+    narrow = _globs(list(globs or []), required=False)
+    root = policy.project_root
+    names, skipped = [], []
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        here = Path(dirpath)
+        dirnames[:] = sorted(d for d in dirnames if d.lower() not in DENIED_PARTS and d.lower() not in AUTO_SKIP_PARTS
+                             and not d.lower().endswith(".egg-info") and not (here / d).is_symlink())
+        prefix = here.relative_to(root).as_posix()
+        for filename in sorted(filenames):
+            name = filename if prefix == "." else f"{prefix}/{filename}"
+            if filename.lower() in AUTO_SKIP_NAMES or (here / filename).is_symlink():
+                continue
+            if narrow and not any(fnmatch.fnmatchcase(name, g) for g in narrow):
+                continue
+            try:
+                policy.check_path(name)
+            except BridgeError:
+                continue
+            try:
+                raw, _ = read_source(root, name, MAX_FILE_BYTES)
+                valid_text(raw)
+            except BridgeError as exc:
+                reason = {"FILE_TOO_LARGE": "too_large", "NON_TEXT": "not_text", "LINE_TOO_LONG": "not_text"}
+                skipped.append({"path": name, "reason": reason.get(exc.code, "unreadable")})
+                continue
+            names.append(name)
+    return sorted(names), skipped
 
 
 class Sanitizer:

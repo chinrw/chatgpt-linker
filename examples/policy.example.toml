@@ -1,7 +1,12 @@
 # Copy outside the source repository and replace the absolute root yourself.
 version = 1
 project_root = "/absolute/path/to/project"
-allowed_globs = ["PLAN.md", "src/*.py", "tests/*.py"]
+allowed_globs = ["*"]
+# Excluded even though allowed_globs matches; the built-in deny list applies on top.
+denied_globs = ["tests/fixtures/*"]
+# Caps for prepare --auto; hard ceilings are 2048 files and 32000000 bytes.
+max_files = 512
+max_bundle_bytes = 8000000
 auto_publish = false
 redact_emails = true
 redact_private_ips = true

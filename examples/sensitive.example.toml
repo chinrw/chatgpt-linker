@@ -1,0 +1,15 @@
+# Copy to ~/.config/chatgpt-linker/sensitive.toml (chmod 600). Merged into every
+# policy when present; it can only add redactions and blocks, never widen scope.
+version = 1
+
+# Names that must never leave the machine: any hit aborts the whole publication.
+block_literals = ["ProjectCodename", "big-customer-inc"]
+
+# Names that are fine to discuss under an alias.
+[[redactions]]
+literal = "corp-internal.example"
+replacement = "<INTERNAL_HOST>"
+
+[[redactions]]
+literal = "Acme Corp"
+replacement = "<COMPANY>"

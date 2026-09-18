@@ -12,7 +12,7 @@ from pathlib import Path
 from .errors import BridgeError
 from .fs import (atomic_write, canonical, digest, fsync_dir, private_dir, read_json,
                  read_source, safe_read, task_lock, write_new)
-from .sanitize import (MAX_BUNDLE_BYTES, MAX_FILE_BYTES, MAX_FILES, Policy, Sanitizer,
+from .sanitize import (MAX_FILE_BYTES, MAX_FILES, Policy, Sanitizer, select_files,
                        assert_no_secrets, valid_text)
 
 RID = re.compile(r"pr_[a-f0-9]{24}\Z")
@@ -263,15 +263,23 @@ class LocalStore:
     def _private_job(self, rid: str) -> Path:
         return private_dir(self.private / valid_rid(rid), create=False)
 
-    def prepare(self, policy_path: Path, plan: str | None, files: list[str], goal: str, *, draft: str | None = None) -> dict:
+    def prepare(self, policy_path: Path, plan: str | None, files: list[str], goal: str, *,
+                draft: str | None = None, auto: bool = False, globs: list[str] | None = None) -> dict:
         policy = Policy.load(policy_path)
         if self.root.resolve().is_relative_to(policy.project_root):
             raise BridgeError("STATE_IN_PROJECT", "Keep bridge state outside the source project.")
         if (plan is None) == (draft is None):
             raise BridgeError("INVALID_PLAN", "Select an existing plan or provide a generated draft, not both.")
+        skipped: list[dict] = []
+        if auto:
+            selected, skipped = select_files(policy, globs)
+            files = list(files) + selected
+        elif globs:
+            raise BridgeError("INPUT_LIMIT", "--glob only narrows --auto; use --file for explicit paths.")
         names = list(dict.fromkeys(([plan] if plan is not None else []) + files))
-        if len(names) + int(draft is not None) > MAX_FILES or not isinstance(goal, str) or not 1 <= len(goal) <= 8192:
-            raise BridgeError("INPUT_LIMIT", "Provide a goal and no more than 64 selected files.")
+        if len(names) + int(draft is not None) > policy.max_files or not isinstance(goal, str) or not 1 <= len(goal) <= 8192:
+            raise BridgeError("INPUT_LIMIT", f"Provide a goal and at most {policy.max_files} files "
+                                             f"(policy max_files); narrow --auto with --glob.")
         sanitizer = Sanitizer(policy)
         goal = sanitizer.clean(valid_text(goal.encode()))
         documents, provenance, signatures = [], [], {}
@@ -290,8 +298,8 @@ class LocalStore:
             text = sanitizer.clean(valid_text(raw))
             title = sanitizer.clean(valid_text(name.encode()))
             total += len(text.encode())
-            if total > MAX_BUNDLE_BYTES:
-                raise BridgeError("BUNDLE_LIMIT", "Selected evidence exceeds the 1 MB limit.")
+            if total > policy.max_bundle_bytes:
+                raise BridgeError("BUNDLE_LIMIT", f"Selected evidence exceeds the policy max_bundle_bytes ({policy.max_bundle_bytes}).")
             documents.append({"id": f"d{n:04d}", "title": title, "kind": "original_plan" if name == plan else "evidence",
                               "text": text, "sha256": digest(text.encode())})
             provenance.append({"relative_path": name, "raw_sha256": digest(raw)})
@@ -318,7 +326,7 @@ class LocalStore:
             shutil.rmtree(job)
             raise
         return {"request_id": rid, "status": "prepared", "bundle_sha256": wrapper["bundle_sha256"],
-                "files": len(documents), "redaction_count": len(sanitizer.mapping)}
+                "files": len(documents), "redaction_count": len(sanitizer.mapping), "skipped": skipped}
 
     def check_source(self, rid: str) -> dict:
         p = read_json(self._private_job(rid) / "provenance.json")
