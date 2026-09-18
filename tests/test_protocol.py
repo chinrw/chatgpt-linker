@@ -131,6 +131,19 @@ class ProtocolTests(Fixture):
         self.assertIn('artifact_path', result)
         self.assertIn('error', self.call('submit_review', {}, control))
 
+    def test_review_wait_accepts_long_bounded_timeouts(self):
+        from chatgpt_linker.protocol import WAIT_MAX_SECONDS
+        control = MCPApplication(local=self.store)
+        schema = control.definitions[2]['inputSchema']['properties']['timeout_seconds']
+        self.assertEqual(schema['maximum'], WAIT_MAX_SECONDS)
+        self.assertGreaterEqual(WAIT_MAX_SECONDS, 300)
+        too_long = {'request_id': self.rid, 'timeout_seconds': WAIT_MAX_SECONDS + 1}
+        self.assertEqual(self.call('review_wait', too_long, control)['error']['code'], -32602)
+        self.store.exchange.submit(self.rid, self.sha, REVIEW)
+        longest = {'request_id': self.rid, 'timeout_seconds': WAIT_MAX_SECONDS}
+        result = self.call('review_wait', longest, control)['result']['structuredContent']
+        self.assertIn('artifact_path', result)  # Returns as soon as the result exists, not at the deadline.
+
     def test_invalid_rpc_id_is_not_reflected(self):
         for identifier in (True, [], {}, None):
             answer = self.app.handle(request('ping', identifier=identifier))

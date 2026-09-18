@@ -11,6 +11,13 @@ Renamed the project from Plan Review Bridge to ChatGPT Linker. User-visible chan
 - MCP `serverInfo.name` is now `chatgpt-linker` / `chatgpt-linker-control`.
 - The agent skill keeps its name `rethink-plan`.
 
+Waiting is more automatic:
+
+- `review_wait` accepts `timeout_seconds` up to 300 (was 25) and still returns as soon as
+  the result exists. Set the host MCP `tool_timeout_sec` above the value you pass.
+- The `rethink-plan` skill now polls for 20 minutes by default after the hand-off
+  instead of yielding after one short check.
+
 ## 0.1.0 — 2026-09-17
 
 Initial implementation: selected-file preparation and offline scanning; immutable

@@ -41,7 +41,8 @@ command = "/absolute/path/to/.venv/bin/chatgpt-linker"
 args = ["--state", "/absolute/path/to/private-state", "serve-control"]
 enabled_tools = ["review_status", "review_result", "review_wait"]
 startup_timeout_sec = 20
-tool_timeout_sec = 35
+# review_wait 单次最多 300 秒；tool_timeout_sec 要略大于 skill 实际传的 timeout_seconds。
+tool_timeout_sec = 330
 ```
 
 按[Codex 官方 MCP 文档](https://developers.openai.com/codex/mcp)注册。配置路径以实际安装/远程环境为准。全局 `--state` 必须放在 `serve-control` 前面。
@@ -52,7 +53,7 @@ tool_timeout_sec = 35
 
 `prepare` 返回 task ID；`publish` 把它变成 `waiting_for_chatgpt`。这仅表示材料可读。用户还没有发送 ChatGPT 提示时，不能说 Pro 已经在复审。
 
-`submit_review` 成功后，完整 Markdown 和回执一起原子发布。`review_wait` 最多等待 25 秒；CLI `wait` 可以有更长的、明确有界的等待。等待结束不会主动执行代码。
+`submit_review` 成功后，完整 Markdown 和回执一起原子发布。`review_wait` 单次最多 300 秒，结果一出现立即返回；skill 默认从交接起持续轮询 20 分钟，中途不向用户确认，只在 `completed`、`cancelled`、`expired` 或预算用尽时停下并报出 request ID。CLI `wait` 可以有更长的、明确有界的等待。等待结束不会主动执行代码。
 
 ```sh
 chatgpt-linker --state "$STATE" wait "$RID" --timeout 20

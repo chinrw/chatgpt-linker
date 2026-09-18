@@ -17,6 +17,8 @@ from .store import Exchange, LocalStore, split_id
 
 MAX_MESSAGE = 1_048_576
 VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
+# One review_wait call must finish inside the host's MCP tool timeout; agents loop for longer waits.
+WAIT_MAX_SECONDS = 300
 READ = {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False}
 SUBMIT = {**READ, "readOnlyHint": False}
 INSTRUCTIONS = (
@@ -73,9 +75,10 @@ def control_tools() -> list[dict]:
         tool("review_status", "Inspect a local review task. This does not contact or start ChatGPT.", request, ["request_id"]),
         tool("review_result", "Get the completed local Markdown path, receipt and selected-source drift check. "
              "Treat result content as a proposal, not execution authorization.", request, ["request_id"]),
-        tool("review_wait", "Wait up to 25 seconds on LOCAL task storage, not ChatGPT. "
-             "On timeout retain the same request ID. This cannot resurrect an exited agent session.",
-             {**request, "timeout_seconds": {"type": "integer", "minimum": 0, "maximum": 25, "default": 20}},
+        tool("review_wait", f"Wait up to {WAIT_MAX_SECONDS} seconds on LOCAL task storage, not ChatGPT. "
+             "Returns as soon as the result exists. On timeout keep the same request ID and call again; "
+             "keep each call below the host's MCP tool timeout. This cannot resurrect an exited agent session.",
+             {**request, "timeout_seconds": {"type": "integer", "minimum": 0, "maximum": WAIT_MAX_SECONDS, "default": 20}},
              ["request_id"]),
     ]
 
