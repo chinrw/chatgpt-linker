@@ -14,7 +14,8 @@ Renamed the project from Plan Review Bridge to ChatGPT Linker. User-visible chan
 Selection is more automatic:
 
 - `prepare --auto` freezes every policy-allowed text file; `--glob` narrows it.
-  Binary, oversized, lock, and cache files are skipped and reported.
+  Binary, oversized, lock, cache, and scanner-rejected files are skipped and reported;
+  explicit `--file` failures now name the file.
 - Policy gains `denied_globs`, `max_files` (default 512, ceiling 2048) and
   `max_bundle_bytes` (default 8 MB, ceiling 32 MB); `policy-init --deny` writes the deny list.
 - `~/.config/chatgpt-linker/sensitive.toml` (or `CHATGPT_LINKER_SENSITIVE`) is merged

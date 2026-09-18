@@ -45,6 +45,25 @@ class AutoSelectionTests(Fixture):
         found = self.store.exchange.search(task['request_id'] + ' b = 2')
         self.assertEqual([r['title'] for r in found['results']], ['src/b.py'])
 
+    def test_auto_skips_files_the_scanner_or_block_list_rejects(self):
+        self.populate()
+        (self.repo / 'src' / 'leak.py').write_text('api_key="do-not-export-this"\n', encoding='utf8')
+        (self.repo / 'src' / 'client.py').write_text('customer = "AcmeCustomer"\n', encoding='utf8')
+        self.write_policy(globs=['*'], extra='block_literals = ["AcmeCustomer"]\n')
+        names, skipped = select_files(Policy.load(self.policy))
+        self.assertNotIn('src/leak.py', names)
+        self.assertNotIn('src/client.py', names)
+        reasons = {s['path']: s['reason'] for s in skipped}
+        self.assertEqual(reasons['src/leak.py'], 'secret_detected')
+        self.assertEqual(reasons['src/client.py'], 'sensitive_literal')
+        # Explicit selection still fails closed, and names the offending path (never its content).
+        from chatgpt_linker.errors import BridgeError
+        with self.assertRaises(BridgeError) as cm:
+            self.store.prepare(self.policy, 'PLAN.md', ['src/leak.py'], 'Review')
+        self.assertEqual(cm.exception.code, 'SECRET_DETECTED')
+        self.assertIn('src/leak.py', cm.exception.message)
+        self.assertNotIn('do-not-export', cm.exception.message)
+
     def test_max_files_is_policy_configurable_and_enforced(self):
         self.populate()
         self.write_policy(globs=['*'], extra='max_files = 3\n')

@@ -203,41 +203,6 @@ class Policy:
             raise BridgeError("OUT_OF_SCOPE", "A selected file is outside the approved path scope.")
 
 
-def select_files(policy: Policy, globs: list[str] | None = None) -> tuple[list[str], list[dict]]:
-    """Every policy-allowed text file under the root, optionally narrowed by globs.
-
-    Returns (sorted relative paths, skipped entries). Files outside the policy are
-    omitted silently; allowed files that cannot be published are reported.
-    """
-    narrow = _globs(list(globs or []), required=False)
-    root = policy.project_root
-    names, skipped = [], []
-    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
-        here = Path(dirpath)
-        dirnames[:] = sorted(d for d in dirnames if d.lower() not in DENIED_PARTS and d.lower() not in AUTO_SKIP_PARTS
-                             and not d.lower().endswith(".egg-info") and not (here / d).is_symlink())
-        prefix = here.relative_to(root).as_posix()
-        for filename in sorted(filenames):
-            name = filename if prefix == "." else f"{prefix}/{filename}"
-            if filename.lower() in AUTO_SKIP_NAMES or (here / filename).is_symlink():
-                continue
-            if narrow and not any(fnmatch.fnmatchcase(name, g) for g in narrow):
-                continue
-            try:
-                policy.check_path(name)
-            except BridgeError:
-                continue
-            try:
-                raw, _ = read_source(root, name, MAX_FILE_BYTES)
-                valid_text(raw)
-            except BridgeError as exc:
-                reason = {"FILE_TOO_LARGE": "too_large", "NON_TEXT": "not_text", "LINE_TOO_LONG": "not_text"}
-                skipped.append({"path": name, "reason": reason.get(exc.code, "unreadable")})
-                continue
-            names.append(name)
-    return sorted(names), skipped
-
-
 class Sanitizer:
     def __init__(self, policy: Policy):
         self.policy = policy
@@ -260,3 +225,40 @@ class Sanitizer:
             text = PRIVATE_IP.sub(lambda m: self._alias(m.group(), "PRIVATE_IP"), text)
         assert_no_secrets(text)
         return valid_text(text.encode("utf-8"))
+
+
+def select_files(policy: Policy, globs: list[str] | None = None) -> tuple[list[str], list[dict]]:
+    """Every policy-allowed text file under the root, optionally narrowed by globs.
+
+    Returns (sorted relative paths, skipped entries). Files outside the policy are
+    omitted silently; allowed files that cannot be published are reported.
+    """
+    narrow = _globs(list(globs or []), required=False)
+    root = policy.project_root
+    sanitizer = Sanitizer(policy)  # Throwaway: only asks "would this file publish?"; aliases are not kept.
+    names, skipped = [], []
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        here = Path(dirpath)
+        dirnames[:] = sorted(d for d in dirnames if d.lower() not in DENIED_PARTS and d.lower() not in AUTO_SKIP_PARTS
+                             and not d.lower().endswith(".egg-info") and not (here / d).is_symlink())
+        prefix = here.relative_to(root).as_posix()
+        for filename in sorted(filenames):
+            name = filename if prefix == "." else f"{prefix}/{filename}"
+            if filename.lower() in AUTO_SKIP_NAMES or (here / filename).is_symlink():
+                continue
+            if narrow and not any(fnmatch.fnmatchcase(name, g) for g in narrow):
+                continue
+            try:
+                policy.check_path(name)
+            except BridgeError:
+                continue
+            try:
+                raw, _ = read_source(root, name, MAX_FILE_BYTES)
+                sanitizer.clean(valid_text(raw))
+            except BridgeError as exc:
+                reason = {"FILE_TOO_LARGE": "too_large", "NON_TEXT": "not_text", "LINE_TOO_LONG": "not_text",
+                          "SECRET_DETECTED": "secret_detected", "SENSITIVE_LITERAL": "sensitive_literal"}
+                skipped.append({"path": name, "reason": reason.get(exc.code, "unreadable")})
+                continue
+            names.append(name)
+    return sorted(names), skipped

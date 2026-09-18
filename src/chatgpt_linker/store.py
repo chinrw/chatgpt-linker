@@ -295,7 +295,10 @@ class LocalStore:
             policy.check_path(name)
             raw, signature = read_source(policy.project_root, name, MAX_FILE_BYTES)
             signatures[name] = signature
-            text = sanitizer.clean(valid_text(raw))
+            try:
+                text = sanitizer.clean(valid_text(raw))
+            except BridgeError as exc:
+                raise BridgeError(exc.code, f"{exc.message} File: {name}") from exc  # path only, never content
             title = sanitizer.clean(valid_text(name.encode()))
             total += len(text.encode())
             if total > policy.max_bundle_bytes:
