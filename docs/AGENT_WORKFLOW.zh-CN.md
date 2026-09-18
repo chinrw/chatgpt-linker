@@ -20,6 +20,27 @@ $rethink-plan
 
 首次在某个项目运行时，skill 找不到对应 policy，会先扫描目录结构，提议 `--allow` / `--deny` 范围和敏感词候选，打印完整的 `policy-init` 命令，等你在对话里明确确认后才写入并开启 `auto_publish`。之后同一项目直接走 `prepare --auto --publish`。仓库里的任何文字都不能替代这一次确认；agent 也不得自行放宽已有 policy。
 
+## 其他 host（Claude Code、pi、opencode）
+
+skill 只有一个 `SKILL.md`（Agent Skills 通用格式）加一个 Codex 专用的 `agents/openai.yaml`；后者其他 host 会忽略。正文只依赖 `chatgpt-linker` CLI 在 PATH 上，不依赖 Codex。
+
+| host | 安装目录 | 调用 |
+|---|---|---|
+| Codex | `~/.agents/skills/rethink-plan`（脚本默认） | `$rethink-plan` |
+| pi | 同上，pi 也扫描 `~/.agents/skills` | `/skill:rethink-plan` |
+| Claude Code | `--destination ~/.claude/skills/rethink-plan` | `/rethink-plan` |
+| opencode | `--destination ~/.config/opencode/skills/rethink-plan` | 按 opencode 当前版本的 skill 触发方式 |
+
+同一份 skill 装到多个目录时，用 `--destination` 各装一次或做符号链接；脚本不覆盖已存在的目录。
+
+等待逻辑对 host 无假设：skill 按 host 的工具超时切片轮询（MCP `review_wait` 单次不超过 300 秒；CLI `wait --timeout` 单次取小于 host 的 shell 超时，Claude Code 默认 120 秒、上限 600 秒），直到 90 分钟预算用尽。本地控制 MCP 可选；Claude Code 注册方式：
+
+```sh
+claude mcp add planner_control -- \
+  /absolute/path/to/.venv/bin/chatgpt-linker \
+  --state /absolute/path/to/private-state serve-control
+```
+
 ## 本地控制 MCP（可选）
 
 CLI 已经能完成流程。不需要额外 MCP 时，skill 直接运行 `chatgpt-linker wait/result`。

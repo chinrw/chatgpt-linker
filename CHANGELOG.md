@@ -15,6 +15,8 @@ Waiting covers a full Pro reasoning pass:
 
 - The skill's default polling budget is 90 minutes (was 20); the invocation can
   name a different one. CLI `wait --timeout` defaults to 5400 seconds (was 1200).
+- The skill no longer assumes Codex: waiting is sliced under the host's tool
+  timeout, and docs list install paths for Claude Code, pi, and opencode.
 
 Selection is more automatic:
 

@@ -101,15 +101,18 @@ After presenting the prompt, start waiting immediately and keep waiting without
 asking the user whether to continue. Default budget: 90 minutes total from the
 hand-off, in bounded calls; a Pro reasoning pass alone can take close to an hour.
 Use a different budget only when the user names one in the invocation (for
-example "wait up to 3 hours"). Use the LOCAL `planner_control.review_wait` with
+example "wait up to 3 hours"). Every call must finish inside the host's own
+tool timeout, so wait in bounded slices and loop. If the host exposes the local
+control MCP (tool `review_wait`, usually registered as `planner_control`), pass
 `timeout_seconds` a little under the host's MCP tool timeout (50 when the host
-default is 60 seconds; up to 300 if the host allows it), or:
+default is 60 seconds; up to 300 if the host allows it). Otherwise use the CLI
+with a slice under the host's shell command timeout:
 
 ```sh
-chatgpt-linker --state "$STATE" wait <id> --timeout 5400
+chatgpt-linker --state "$STATE" wait <id> --timeout 100
 ```
 
-The CLI form waits the whole budget in one process. A CLI timeout (exit 3) or a `waiting_for_chatgpt` reply means not yet: call
+A CLI timeout (exit 3) or a `waiting_for_chatgpt` reply means not yet: call
 again. Stop only on `completed`, `cancelled`, `expired`, or when the budget is
 spent; then report the request ID so the user can resume. Say once, up front,
 that the user must send the prompt in ChatGPT before anything can arrive. Never
