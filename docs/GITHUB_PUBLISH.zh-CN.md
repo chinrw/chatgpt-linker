@@ -4,7 +4,7 @@
 
 | 项 | 值 |
 |---|---|
-| 仓库 | <https://github.com/chinrw/codex-linker> |
+| 仓库 | <https://github.com/chinrw/chatgpt-linker> |
 | 可见性 | **public** |
 | 默认分支 | `main` |
 | 创建方式 | 仓库所有者在 GitHub 上手工创建，本机未使用建仓脚本 |

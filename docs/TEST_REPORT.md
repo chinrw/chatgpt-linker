@@ -59,7 +59,7 @@ submit_review → completed，回执 source=mcp_submit
 
 额外安装验证：把生成的 wheel 安装到**新建的虚拟环境**，不使用源码目录的 PYTHONPATH。通过安装后的 console script 执行 policy-init、prepare/publish；通过真实 MCP stdio 初始化、fetch、submit_review；再由 wait 取得 Markdown。确认结果完整、hash 校验通过、所选源文件未改变。
 
-源码归档会从白名单生成，排除 `.venv`、缓存、真实状态和 Git history；文档中的相对链接已检查，无断链。GitHub 发布脚本的测试使用明确的模拟 gh，**没有实际创建远程仓库**；本仓库是用普通 `git push` 推送到既有的 `chinrw/codex-linker`，没有经过该脚本。
+源码归档会从白名单生成，排除 `.venv`、缓存、真实状态和 Git history；文档中的相对链接已检查，无断链。GitHub 发布脚本的测试使用明确的模拟 gh，**没有实际创建远程仓库**；本仓库是用普通 `git push` 推送到既有的 `chinrw/chatgpt-linker`，没有经过该脚本。
 
 可选 coverage 测量：父进程 74% statement coverage。CLI 多数测试运行于独立子进程，这次未合并其 coverage，因此该数字不代表 CLI 未测试，也不应被改写成一个不存在的全进程覆盖率。
 
@@ -73,7 +73,7 @@ submit_review → completed，回执 source=mcp_submit
 
 ## GitHub 发布
 
-- 仓库：<https://github.com/chinrw/codex-linker>（**public**，仓库所有者手工创建，不是由发布脚本创建）
+- 仓库：<https://github.com/chinrw/chatgpt-linker>（**public**，仓库所有者手工创建，不是由发布脚本创建）
 - 首次提交：`57441604974e0a23fce3d861779ed48b4751f40e`，46 个文件：源码、测试、文档、skill、示例、脚本、CI 配置；不含任务 state、`.venv`、缓存或凭据
 - 推送方式：普通 `git push origin main`；每次推送后用 `git ls-remote origin` 核对远端 `refs/heads/main` 与本地 `main` 的 SHA 一致，`gh repo view` 显示 `defaultBranchRef.name=main`、`isEmpty=false`
 - 记录性提交会改变 head，所以这里不把“当前 head”写成固定值；以 `git ls-remote origin` 与 Actions 页面为准
@@ -83,8 +83,8 @@ submit_review → completed，回执 source=mcp_submit
 
 | 运行 | head | 结果 |
 |---|---|---|
-| [run 35206621575](https://github.com/chinrw/codex-linker/actions/runs/35206621575) | `5744160` | 5 个 job 全部 `success` |
-| [run 35206837850](https://github.com/chinrw/codex-linker/actions/runs/35206837850) | `f1a4a96` | 5 个 job 全部 `success`，无 annotation |
+| [run 35206621575](https://github.com/chinrw/chatgpt-linker/actions/runs/35206621575) | `5744160` | 5 个 job 全部 `success` |
+| [run 35206837850](https://github.com/chinrw/chatgpt-linker/actions/runs/35206837850) | `f1a4a96` | 5 个 job 全部 `success`，无 annotation |
 
 两次都是同一矩阵：ubuntu-latest 上的 Python 3.11 / 3.12 / 3.13，以及 macos-latest 上的 Python 3.12 / 3.13。每个 job 执行 compileall、`bash -n scripts/*.sh`、88 项 unittest，并用 uv 构建 wheel。
 

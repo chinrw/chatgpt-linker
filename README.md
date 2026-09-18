@@ -140,7 +140,7 @@ bash scripts/install-skill.sh
 - [安全模型](docs/SECURITY.zh-CN.md) · [OpenAI 条款与数据边界](docs/COMPLIANCE.zh-CN.md)
 - [GitHub 仓库与发布](docs/GITHUB_PUBLISH.zh-CN.md) · [测试报告](docs/TEST_REPORT.md)
 
-本仓库：**<https://github.com/chinrw/codex-linker>（public）**，默认分支 `main`。日常更新就是普通推送：
+本仓库：**<https://github.com/chinrw/chatgpt-linker>（public）**，默认分支 `main`。日常更新就是普通推送：
 
 ```sh
 git push origin main
