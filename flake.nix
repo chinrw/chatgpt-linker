@@ -16,6 +16,11 @@
       pyproject = (builtins.fromTOML (builtins.readFile ./pyproject.toml)).project;
     in
     {
+      homeManagerModules = {
+        chatgpt-linker = import ./nix/home-manager.nix { inherit self; };
+        default = self.homeManagerModules.chatgpt-linker;
+      };
+
       packages = forAllSystems (pkgs: rec {
         chatgpt-linker = pkgs.python3Packages.buildPythonApplication {
           pname = pyproject.name;

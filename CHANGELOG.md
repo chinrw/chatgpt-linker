@@ -16,6 +16,10 @@ Renamed the project from Plan Review Bridge to ChatGPT Linker. User-visible chan
 Packaging:
 
 - `flake.nix`: `packages.default`, `checks` (unit tests), `devShells.default`.
+- `homeManagerModules.default` installs the CLI and ultraplan through
+  `programs.chatgpt-linker.enable`. The module owns the shared agent and Claude
+  skill paths; consumers select `skillTargets` instead of copying source paths.
+  Source snapshots include the flake and its Home Manager module.
 
 Waiting uses a bounded review budget:
 

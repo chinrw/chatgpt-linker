@@ -2,6 +2,8 @@
 
 ## 安装位置与显式触发
 
+使用 Home Manager 时，优先导入 [flake 提供的模块](../README.md#nix)。模块统一维护 CLI 和两个 skill 目录，不再由下游拼接本仓库的 skill 路径。下面的安装脚本用于不通过 HM 管理 skill 的环境。
+
 运行 `bash scripts/install-skill.sh`，安装到 `~/.agents/skills/ultraplan`。也可指定精确目标目录：
 
 ```sh

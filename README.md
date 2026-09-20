@@ -60,7 +60,20 @@ PYTHONPATH="$PWD/src" python3 -m chatgpt_linker --help
 nix run github:chinrw/chatgpt-linker -- --version
 ```
 
-在 home-manager 里作为 input 使用：把 `inputs.chatgpt-linker.packages.${system}.default` 加进 `home.packages`，把 `${inputs.chatgpt-linker}/skills/ultraplan` 链接到各 agent 的 skill 目录。Codex、Claude Code 的 MCP 注册和 tunnel-client 的 `mcp.commands` 用稳定路径 `~/.nix-profile/bin/chatgpt-linker`，升级后不用改。
+Home Manager 可直接导入本仓库的模块，让 CLI 和 skill 路径随同一 flake 版本更新：
+
+```nix
+{
+  imports = [ inputs.chatgpt-linker.homeManagerModules.default ];
+  programs.chatgpt-linker.enable = true;
+}
+```
+
+默认安装 CLI，并将 `ultraplan` 链接到 `~/.agents/skills/ultraplan` 和 `~/.claude/skills/ultraplan`。可设置 `programs.chatgpt-linker.skillTargets = [ "agents" ];` 只安装共享 skill，或设为 `[]` 只安装 CLI；`package` 可覆盖 CLI 包。模块不配置 tunnel、凭据、MCP 注册或项目发布 policy。
+
+从手动接入迁移时，删除下游重复的 CLI package 条目、旧 `rethink-plan` / `ultraplan` 的 `home.file` 定义及自定义 skill 激活注册，统一交给此模块。更新下游锁定的 `chatgpt-linker` input 后再执行 HM switch；只更新 input 不会自动替换旧配置。模块在求值时检查 skill 的 `SKILL.md` 是否存在，避免把错误路径带到激活阶段。
+
+Codex、Claude Code 的 MCP 注册和 tunnel-client 的 `mcp.commands` 继续使用稳定路径 `~/.nix-profile/bin/chatgpt-linker`。
 
 ## 第一次：用仓库内的合成示例
 

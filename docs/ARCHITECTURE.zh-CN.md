@@ -4,6 +4,8 @@
 
 这是一个单用户、私有连接的 Python 程序。无需模型 API，也没有常驻模型调度器。进程分为本地 CLI、远程证据 MCP，以及可选本地控制 MCP；复用同一存储层。
 
+flake 导出 `homeManagerModules.default`（同 `homeManagerModules.chatgpt-linker`）。模块位于 `nix/home-manager.nix`，通过 `programs.chatgpt-linker.enable` 安装 CLI，并按 `skillTargets` 声明共享 agent / Claude 的 skill 链接。默认两处都启用；空列表只安装 CLI。它只负责安装，不创建任务、发布授权、凭据或 tunnel 服务。使用方移除旧 skill 激活注册后，链接随 HM generation 更新。
+
 ```text
 src/chatgpt_linker/
   fs.py            openat/no-follow、私有权限、原子写入和文件锁
