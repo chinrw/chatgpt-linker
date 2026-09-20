@@ -48,6 +48,9 @@ Selection is more automatic:
 - An explicit `ultraplan` invocation authorizes that review's preparation and
   publication without a second confirmation. Initial policies use the task's
   scope; standing approval and expansions of existing policies remain separate.
+- After validating a completed review, ultraplan resumes implementation and
+  tests when the original task already authorized them. Review-only requests
+  still end with the plan; unverified model provenance is not a stop condition.
 
 ## 0.1.0 — 2026-09-17
 
