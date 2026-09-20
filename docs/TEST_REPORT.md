@@ -1,12 +1,24 @@
 # Verification report — v0.1.0
 
-核实日期：2026-09-17。本文件记录不同环境下的独立核实，结论分别按环境标注；无法在本机复现的环境只作为记录保留。
+最新核实日期：2026-09-20。本文件记录不同环境下的独立核实，结论分别按环境标注；无法在本机复现的环境只作为记录保留。
 
-## A. 交付环境（Linux，CPython 3.13.5）
+## 当前本地复核（2026-09-20，Linux，CPython 3.14.7）
+
+`PYTHONPATH=src python -m unittest discover -s tests -v`：120 项通过。首次沙箱运行有 6 项 HTTP 测试因无法创建 loopback socket 报 `PermissionError`；允许本机 socket 后完整重跑通过。
+
+本次提交前另通过 Python `compileall`、逐个 shell 脚本的 `bash -n`、15 个文档相对文件链接检查和 `git diff --check`。
+
+新增 20 项测试使用临时合成 Git 仓库，GitHub 响应在传输边界模拟。覆盖干净公开基线、未推送提交、暂存/未暂存/未跟踪文件、删除与重命名、删除后重建、模式与链接、policy/扫描省略、冲突与隐藏 index 状态、来源漂移、禁止外部 Git helper、CLI 参数及 prepare/publish/fetch/submit/result 链路。未构造真实 ChatGPT 结果。
+
+skill 已在仓库中更名为 `ultraplan`，安装和源码快照测试使用新目录。仓库外已安装副本尚未迁移，本轮改动尚未经过远端 CI 或部署验证。
+
+实际 `gh api repos/chinrw/chatgpt-linker` 返回 `private=false`、`visibility=public`。新 `repo-info` 命令的匿名 API 验证返回 HTTP 403，响应头 `x-ratelimit-remaining=0`；移除代理后的直连尝试也未成功。因此本次未完成其真实联网成功路径；失败没有降级为整仓传输。真实 ChatGPT 对固定 commit URL 的读取与结果回传仍未验证。
+
+## 历史交付记录（Linux，CPython 3.13.5）
 
 上一轮交付记录：88 项测试通过、`compileall` 与 `bash -n` 通过、wheel 可构建。该次运行的环境不是当前源码目录所在的机器，本机没有复现它的同一解释器版本，故此处只作为记录保留，不作为本机核实结果。
 
-## B. 发布前复核（macOS arm64，CPython 3.14.7）
+## 历史发布前复核（2026-09-17，macOS arm64，CPython 3.14.7）
 
 在提交到 GitHub 之前，对当前源码目录重新完整执行：
 

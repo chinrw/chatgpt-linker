@@ -7,13 +7,15 @@ a constrained MCP outbox, and an explicit-invocation agent skill.
 
 版本：**0.1.0，Alpha**。这是可运行的实现，不只是设计文档。运行时仅依赖 Python 标准库，支持 Linux/macOS/WSL2，要求 Python 3.11+。项目不包含任何 OpenAI 模型 API 后端。
 
+公开仓库增量模式还需要本机 Git 和匿名 GitHub API 的网络访问；普通本地材料模式无需这两项。
+
 > 自动化边界：你仍需在 ChatGPT 中选择所需 Pro 模型并发送一次任务提示；平台可能要求确认结果提交。程序不创建 ChatGPT 对话，不读取 Cookie，不抓取网页回答，也不能认证实际使用了哪个模型。首次必须用合成任务验证你的账号、模型和自定义工具组合。当前发布的本地测试不等于已完成真实 ChatGPT 接入。
 
 ## 正常工作流
 
 ```text
-$rethink-plan
-  → agent 选择材料、做语义脱敏
+$ultraplan
+  → agent 核验仓库可见性，选择 context、计划和本地改动
   → CLI 本地检查、冻结证据、发布任务
   → 你在 ChatGPT Pro 中发送生成的短提示
   → ChatGPT search / fetch，核验并重新规划
@@ -58,7 +60,7 @@ PYTHONPATH="$PWD/src" python3 -m chatgpt_linker --help
 nix run github:chinrw/chatgpt-linker -- --version
 ```
 
-在 home-manager 里作为 input 使用：把 `inputs.chatgpt-linker.packages.${system}.default` 加进 `home.packages`，把 `${inputs.chatgpt-linker}/skills/rethink-plan` 链接到各 agent 的 skill 目录。Codex、Claude Code 的 MCP 注册和 tunnel-client 的 `mcp.commands` 用稳定路径 `~/.nix-profile/bin/chatgpt-linker`，升级后不用改。
+在 home-manager 里作为 input 使用：把 `inputs.chatgpt-linker.packages.${system}.default` 加进 `home.packages`，把 `${inputs.chatgpt-linker}/skills/ultraplan` 链接到各 agent 的 skill 目录。Codex、Claude Code 的 MCP 注册和 tunnel-client 的 `mcp.commands` 用稳定路径 `~/.nix-profile/bin/chatgpt-linker`，升级后不用改。
 
 ## 第一次：用仓库内的合成示例
 
@@ -89,6 +91,24 @@ chatgpt-linker prompt "$RID"
 ```
 
 `--approve` 是你对本次外发材料的批准。日常使用时，可以由你在可信 policy 中开启 `auto_publish = true`；之后 agent 在该范围内使用 `prepare --publish`。不要让 agent 自行扩大范围。
+
+显式调用 `$ultraplan` 已授权本次复审所需材料的准备和发布，agent 无需再要求你回复一次确认。首次缺少 policy 时，agent 可按本次范围创建 policy 并执行 `publish --approve`；长期 `auto_publish` 和已有 policy 的范围扩大仍需相应授权。
+
+### 公开仓库：固定版本引用和本地增量
+
+GitHub 公开仓库可以只传当前 context、计划和相对公开基线发生变化的文件，未变化的源码由复审方按固定 commit URL 阅读。CLI 使用匿名 GitHub API 核验仓库可见性和 commit 可读性，不依据 README 或远端地址猜测。
+
+```sh
+chatgpt-linker repo-info --repo /abs/project
+chatgpt-linker prepare --policy ~/.config/chatgpt-linker/project.toml \
+  --draft-stdin --public-repo --goal '检查当前计划与本地改动' < draft.md
+```
+
+准备后检查返回的 `public_baseline` 和 `skipped`，再发布该任务。默认基线是 HEAD 与本地缓存 upstream ref 的共同祖先；没有 upstream 时使用 `origin` 的默认分支缓存。可用 `--remote NAME --base SHA` 固定已核验的公开祖先。命令不 fetch、不修改 Git index；缓存过旧可能多传已经公开的改动。
+
+本地增量包含未推送提交、暂存和未暂存修改、未忽略的未跟踪文件；发送的是工作树当前完整文件，删除和文件模式写入清单，重命名表示为删除加新增。清单中的 `skipped` 表示证据缺口，不能把这些路径当作公开版本未变化。Git 冲突、sparse/skip-worktree 或 assume-unchanged 状态会被拒绝，以免漏掉改动。
+
+本地材料继续遵守 policy 和凭据扫描。`--public-repo` 不能与 `--auto` / `--glob` 混用，可追加 `--file` 补充复审方无法读取的公开文件。其他 Git 托管平台和无法核验可见性的仓库使用本地材料模式；验证失败不会自动上传整仓。公开 URL 不属于冻结包，真实 ChatGPT 会话能否读取这些 URL 仍需实测。
 
 ### 整个允许范围一次冻结
 
@@ -135,7 +155,7 @@ chatgpt-linker result "$RID"
 chatgpt-linker wait "$RID" --timeout 5400
 ```
 
-返回的 `artifact_path` 指向固定 `review.md`，同时包含 SHA-256 回执和已选源文件的漂移检查。`wait` 只观察本地文件，不访问 ChatGPT。
+返回的 `artifact_path` 指向固定 `review.md`，同时包含 SHA-256 回执和来源漂移检查。公开模式还检查 HEAD 及增量清单的变化，具体范围见[架构](docs/ARCHITECTURE.zh-CN.md#公开仓库与本地增量)。`wait` 只观察本地状态，不访问 ChatGPT。
 
 ## 安装 agent skill
 
@@ -143,7 +163,7 @@ chatgpt-linker wait "$RID" --timeout 5400
 bash scripts/install-skill.sh
 ```
 
-默认安装至 `~/.agents/skills/rethink-plan`，已有同名目录时拒绝覆盖。然后在实际运行 agent 的主机上重新加载 skill，显式调用 `$rethink-plan`。
+默认安装至 `~/.agents/skills/ultraplan`，已有同名目录时拒绝覆盖。然后在实际运行 agent 的主机上重新加载 skill，显式调用 `$ultraplan`。旧 `rethink-plan` 安装不会自动迁移，升级步骤见[接力教程](docs/AGENT_WORKFLOW.zh-CN.md#安装位置与显式触发)。
 
 **[Agent 接力、Codex 注册与恢复教程](docs/AGENT_WORKFLOW.zh-CN.md)** 包含本地控制 MCP 配置。CLI 也能独立使用，不强制安装控制 MCP。
 
@@ -151,7 +171,7 @@ bash scripts/install-skill.sh
 
 已实现：明确文件选择、内置凭据拦截、邮箱/内网 IPv4 与自定义字面替换、冻结哈希、路径/链接检查、TTL/取消、单任务固定结果、原子提交、同内容幂等、冲突拒绝、引用范围验证、私有文件权限。
 
-**没有实现或不能保证：** 完整企业 DLP、所有商业秘密识别、多租户认证、公开 OAuth、自启动 ChatGPT、自动复活已退出的 agent、Pro 模型身份认证、整仓库一致性快照、自动删除过期数据。只检查你选中的文件；扫描器存在漏报和误报。进程级强制隔离需要按教程部署，不能仅靠提示词。
+**没有实现或不能保证：** 完整企业 DLP、所有商业秘密识别、多租户认证、公开 OAuth、自启动 ChatGPT、自动复活已退出的 agent、Pro 模型身份认证、整仓库一致性快照、自动删除过期数据。内容检查仅覆盖所选材料，省略文件和外部公开源码不在冻结包内；扫描器存在漏报和误报。进程级强制隔离需要按教程部署，不能仅靠提示词。
 
 协议采用有限的 MCP stdio / 无状态 Streamable HTTP 实现，目标修订版 `2025-11-25`，非官方 SDK；没有实现 sampling、tasks、elicitation 或主动通知。参见 [架构](docs/ARCHITECTURE.zh-CN.md) 和 [测试报告](docs/TEST_REPORT.md)。
 

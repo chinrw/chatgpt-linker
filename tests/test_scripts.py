@@ -9,7 +9,7 @@ from support import Fixture, ROOT
 
 class ScriptTests(Fixture):
     def test_skill_install_and_refuse_overwrite(self):
-        destination = self.base/'skills'/'rethink-plan'
+        destination = self.base/'skills'/'ultraplan'
         command = [sys.executable, str(ROOT/'scripts/install_skill.py'), '--destination',str(destination)]
         result = subprocess.run(command,capture_output=True,text=True,timeout=10)
         self.assertEqual(result.returncode,0,result.stderr)
@@ -26,7 +26,7 @@ class ScriptTests(Fixture):
         dest.mkdir()
         module.snapshot(ROOT,dest)
         self.assertTrue((dest/'README.md').is_file())
-        self.assertTrue((dest/'skills/rethink-plan/SKILL.md').is_file())
+        self.assertTrue((dest/'skills/ultraplan/SKILL.md').is_file())
         self.assertTrue((dest/'.github/workflows/ci.yml').is_file())
         self.assertFalse((dest/'.venv').exists())
         self.assertFalse(list(dest.rglob('*.pyc')))

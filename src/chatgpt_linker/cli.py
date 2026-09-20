@@ -34,6 +34,10 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--state", type=Path, default=default_state(), help="Private state directory, outside the source repo")
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("init", help="Create private task storage")
+    info = sub.add_parser("repo-info", help="Verify an anonymous public GitHub baseline without uploading source")
+    info.add_argument("--repo", type=Path, required=True)
+    info.add_argument("--remote", help="Remote name; defaults to the upstream remote or origin")
+    info.add_argument("--base", help="Public ancestor commit/ref; defaults to merge-base with the cached remote ref")
     policy = sub.add_parser("policy-init", help="Create a USER-approved publication policy outside the repo")
     policy.add_argument("--repo", type=Path, required=True)
     policy.add_argument("--output", type=Path, required=True)
@@ -47,6 +51,9 @@ def parser() -> argparse.ArgumentParser:
     plan.add_argument("--draft-stdin", action="store_true", help="Read an agent-generated draft from stdin; never write it to the repo")
     prep.add_argument("--file", action="append", default=[], help="Exact approved relative file; repeatable")
     prep.add_argument("--auto", action="store_true", help="Also select every policy-allowed text file under the project")
+    prep.add_argument("--public-repo", action="store_true", help="Verify a public GitHub baseline and select only local changes")
+    prep.add_argument("--remote", help="Public remote name; defaults to the upstream remote or origin")
+    prep.add_argument("--base", help="Public ancestor commit/ref for the local overlay")
     prep.add_argument("--glob", action="append", default=[], help="Narrow --auto to matching relative paths; repeatable")
     prep.add_argument("--goal", required=True)
     prep.add_argument("--publish", action="store_true", help="Publish only if policy auto_publish is true")
@@ -81,6 +88,10 @@ def parser() -> argparse.ArgumentParser:
 
 
 def run(args: argparse.Namespace) -> int:
+    if args.command == "repo-info":
+        from .git_evidence import public_baseline
+        emit(public_baseline(args.repo.expanduser().resolve(strict=True), args.remote, args.base))
+        return 0
     if args.command == "policy-init":
         from .sanitize import Policy
         repo, output = args.repo.expanduser().resolve(strict=True), args.output.expanduser().absolute()
@@ -153,7 +164,8 @@ def run(args: argparse.Namespace) -> int:
                 draft = raw.decode("utf-8")
             except (ValueError, UnicodeError) as exc:
                 raise BridgeError("INVALID_PLAN", "Draft must be bounded UTF-8 text.") from exc
-        prepared = store.prepare(args.policy, args.plan, args.file, args.goal, draft=draft, auto=args.auto, globs=args.glob)
+        prepared = store.prepare(args.policy, args.plan, args.file, args.goal, draft=draft, auto=args.auto, globs=args.glob,
+                                 public_repo=args.public_repo, remote=args.remote, base=args.base)
         if args.publish:
             try:
                 prepared = {**prepared, **store.publish(prepared["request_id"])}  # keep files/skipped visible

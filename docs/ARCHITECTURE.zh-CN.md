@@ -8,6 +8,7 @@
 src/chatgpt_linker/
   fs.py            openat/no-follow、私有权限、原子写入和文件锁
   sanitize.py      可信 TOML policy、材料过滤和本地脱敏
+  git_evidence.py  匿名 GitHub 基线验证、只读 Git 增量与公开引用
   store.py         冻结包、授权、引用、固定结果、状态与来源漂移
   protocol.py      有限 MCP/JSON-RPC，stdio 与工具路由
   http_server.py   loopback-only 调试用无状态 Streamable HTTP
@@ -56,7 +57,17 @@ TTL 到期且尚未完成 → expired
 
 Canonical JSON 使用 UTF-8、key 排序、紧凑分隔符及有限数字；bundle SHA-256 不包含自身。每份文档另有内容 hash，访问时验证。检查结果会在同内容重复提交时再次验证存储完整性。
 
-CRLF/CR 统一为 LF；显示路径可以脱敏，因此源行号是冻结文本的逻辑行号。没有 Git commit attestation，不伪造 commit 或公开源码 URL。
+CRLF/CR 统一为 LF；显示路径可以脱敏，因此源行号是冻结文本的逻辑行号。普通本地材料模式不提供 Git commit attestation。
+
+### 公开仓库与本地增量
+
+`repo-info --repo PATH [--remote NAME] [--base REF]` 只检查 Git 和匿名 GitHub API，不创建任务或 state。支持标准 github.com HTTPS/SSH remote；验证仓库 `private=false`、`visibility=public`、仓库身份一致，以及基线 commit 可匿名读取。采用 GitHub 的 [repository](https://docs.github.com/en/rest/repos/repos#get-a-repository) 和 [Git commit](https://docs.github.com/en/rest/git/commits#get-a-commit-object) 接口，不加载 GitHub token，拒绝重定向。私有、未知、限流或网络失败统一报告 `PUBLIC_REPO_UNVERIFIED`，不能据此断言仓库私有。
+
+`prepare --public-repo` 重做验证，冻结一份 `public_baseline` 文档及本地改动文件。默认选择 upstream remote；没有时用 origin。基线为 HEAD 与该远端缓存 ref 的共同祖先；`--base` 可显式指定公开祖先。不会 fetch，缓存陈旧可能多传已公开文件。无可用 ref、本地缺少 commit 或基线不属于 HEAD 的祖先时报错，不能猜测基线。
+
+增量相对固定基线计算，覆盖未推送提交和最终工作树；Git index 不作为独立版本传递。非忽略 untracked 文件参与选择。普通文件发送完整内容；删除以清单记录；重命名拆成删除/新增；可执行位写入 Git mode。policy 排除、敏感内容、二进制、超限文件、符号链接和 submodule 作为 `skipped` 写入证据缺口清单。冲突、sparse/skip-worktree、assume-unchanged 状态拒绝准备。公开模式不支持 `--auto` / `--glob`，仍可用 `--file` 增补明确文件。
+
+本地 provenance 另存 HEAD、基线和增量清单。捕获结束、publish 和 result 检查所选文件内容及 HEAD/增量清单漂移。公开 URL 的可用性和省略文件内容不在此检查内。基线链接固定 commit，但公开文件字节不在 bundle 中；这不是整仓快照。Git 只读命令禁用可选 index 写入、fsmonitor、外部 diff、textconv 和 clean/process filters，不运行项目代码。
 
 ## 远程工具
 
@@ -66,7 +77,7 @@ CRLF/CR 统一为 LF；显示路径可以脱敏，因此源行号是冻结文本
 
 结果必须包含六个二级标题：`Summary`、`Evidence`、`Plan`、`Validation`、`Risks`、`Open Questions`，正文语言自由。引用形如 `[d0001:L1-L3]`；至少一个有效引用，所有匹配该格式的引用均须在范围内。
 
-引用检查只验证文档/行范围存在，不验证论证正确性或引用完整性，也不保证模型没有遗漏信息。
+引用检查只验证文档/行范围存在，不验证论证正确性或引用完整性，也不保证模型没有遗漏信息。公开模式允许另附固定 commit 的 blob URL / 行锚点；这些外部引用不由服务端校验，仍要求至少一个有效本地文档引用（例如 context 或计划）。复审方无法读取公开代码时必须报告缺口；用新任务补充所需 `--file` 材料。
 
 `search/fetch` 是只读；`submit_review` 是非破坏性的写入。已成功提交后，相同字节返回原回执，不同字节报 `RESULT_CONFLICT`。更新计划请新建任务；没有 overwrite、append 或 delete 工具。
 

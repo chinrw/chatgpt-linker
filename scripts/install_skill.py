@@ -8,10 +8,10 @@ from pathlib import Path
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--destination', type=Path, default=Path.home()/'.agents/skills/rethink-plan',
+    parser.add_argument('--destination', type=Path, default=Path.home()/'.agents/skills/ultraplan',
                         help='Exact destination directory; it must not exist')
     args = parser.parse_args()
-    source = Path(__file__).resolve().parents[1]/'skills/rethink-plan'
+    source = Path(__file__).resolve().parents[1]/'skills/ultraplan'
     dest = args.destination.expanduser().absolute()
     if dest.exists() or dest.is_symlink():
         parser.error('Destination already exists; compare changes and move it aside explicitly before reinstalling.')
@@ -22,7 +22,7 @@ def main():
     for path in dest.rglob('*'):
         os.chmod(path, 0o700 if path.is_dir() else 0o600)
     dest.chmod(0o700)
-    print(f'Installed rethink-plan at {dest}. Restart/reload your agent to discover it.')
+    print(f'Installed ultraplan at {dest}. Restart/reload your agent to discover it.')
 
 
 if __name__ == '__main__':

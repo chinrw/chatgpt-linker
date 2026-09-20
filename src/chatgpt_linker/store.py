@@ -14,6 +14,7 @@ from .fs import (atomic_write, canonical, digest, fsync_dir, private_dir, read_j
                  read_source, safe_read, task_lock, write_new)
 from .sanitize import (MAX_FILE_BYTES, MAX_FILES, Policy, Sanitizer, select_files,
                        assert_no_secrets, valid_text)
+from .git_evidence import baseline_document, public_baseline, select_delta, working_delta
 
 RID = re.compile(r"pr_[a-f0-9]{24}\Z")
 DID = re.compile(r"(?:request|d[0-9]{4})\Z")
@@ -113,6 +114,11 @@ class Exchange:
         for d in p["documents"]:
             count = len(d["text"].splitlines()) or 1
             lines.append(f"- {p['request_id']}:{d['id']} | {d['kind']} | {d['title']} | lines 1-{count}")
+        if any(d["kind"] == "public_baseline" for d in p["documents"]):
+            lines += ["", "Read the public_baseline document first for the exact public commit and local overlay.",
+                      "Read unchanged source at its public commit URLs. Report inaccessible source as an evidence gap.",
+                      "Cite public source with commit-pinned blob URLs; at least one local document citation is also required.",
+                      "Public URLs are external evidence; this service validates only local document line ranges."]
         lines += ["", "## Result contract", "Use these exact level-2 headings (body may be Chinese):",
                   *[f"## {name}" for name in REQUIRED_SECTIONS], "",
                   "Cite evidence as [d0001:L1-L3]. Every cited line must exist.",
@@ -264,20 +270,32 @@ class LocalStore:
         return private_dir(self.private / valid_rid(rid), create=False)
 
     def prepare(self, policy_path: Path, plan: str | None, files: list[str], goal: str, *,
-                draft: str | None = None, auto: bool = False, globs: list[str] | None = None) -> dict:
+                draft: str | None = None, auto: bool = False, globs: list[str] | None = None,
+                public_repo: bool = False, remote: str | None = None, base: str | None = None) -> dict:
         policy = Policy.load(policy_path)
         if self.root.resolve().is_relative_to(policy.project_root):
             raise BridgeError("STATE_IN_PROJECT", "Keep bridge state outside the source project.")
         if (plan is None) == (draft is None):
             raise BridgeError("INVALID_PLAN", "Select an existing plan or provide a generated draft, not both.")
         skipped: list[dict] = []
-        if auto:
+        baseline, delta, overlay = None, None, None
+        if public_repo:
+            if auto or globs:
+                raise BridgeError("INPUT_LIMIT", "Public mode selects local changes; use --file for additional evidence.")
+            baseline = public_baseline(policy.project_root, remote, base)
+            delta = working_delta(policy.project_root, baseline["baseline_sha"])
+            selected, included, skipped = select_delta(policy, delta)
+            files = list(files) + selected
+            overlay = baseline_document(baseline, included, skipped)
+        elif remote is not None or base is not None:
+            raise BridgeError("INPUT_LIMIT", "--remote and --base require --public-repo.")
+        elif auto:
             selected, skipped = select_files(policy, globs)
             files = list(files) + selected
         elif globs:
             raise BridgeError("INPUT_LIMIT", "--glob only narrows --auto; use --file for explicit paths.")
         names = list(dict.fromkeys(([plan] if plan is not None else []) + files))
-        if len(names) + int(draft is not None) > policy.max_files or not isinstance(goal, str) or not 1 <= len(goal) <= 8192:
+        if len(names) + int(draft is not None) + int(public_repo) > policy.max_files or not isinstance(goal, str) or not 1 <= len(goal) <= 8192:
             raise BridgeError("INPUT_LIMIT", f"Provide a goal and at most {policy.max_files} files "
                                              f"(policy max_files); narrow --auto with --glob.")
         sanitizer = Sanitizer(policy)
@@ -291,6 +309,13 @@ class LocalStore:
             documents.append({"id": "d0001", "title": "Agent draft plan", "kind": "original_plan",
                               "text": draft, "sha256": digest(draft.encode())})
             total = len(draft.encode())
+        if overlay is not None:
+            overlay = sanitizer.clean(valid_text(overlay.encode()))
+            documents.append({"id": f"d{len(documents) + 1:04d}", "title": "Public baseline and local changes",
+                              "kind": "public_baseline", "text": overlay, "sha256": digest(overlay.encode())})
+            total += len(overlay.encode())
+        if total > policy.max_bundle_bytes:
+            raise BridgeError("BUNDLE_LIMIT", "Plan and baseline exceed the policy max_bundle_bytes.")
         for n, name in enumerate(names, len(documents) + 1):
             policy.check_path(name)
             raw, signature = read_source(policy.project_root, name, MAX_FILE_BYTES)
@@ -311,6 +336,8 @@ class LocalStore:
             raw, sig = read_source(policy.project_root, record["relative_path"], MAX_FILE_BYTES)
             if sig != signatures[record["relative_path"]] or digest(raw) != record["raw_sha256"]:
                 raise BridgeError("SOURCE_CHANGED", "Selected files changed during capture; retry.")
+        if delta is not None and working_delta(policy.project_root, delta["baseline_sha"]) != delta:
+            raise BridgeError("SOURCE_CHANGED", "Git changes changed during capture; retry.")
         rid = "pr_" + secrets.token_hex(12)
         payload = {"schema_version": 1, "request_id": rid, "goal": goal, "documents": documents}
         assert_no_secrets(canonical(payload).decode())
@@ -320,6 +347,8 @@ class LocalStore:
                   "policy_sha256": digest(raw_policy), "files": provenance,
                   "ttl_hours": policy.ttl_hours, "auto_publish": policy.auto_publish,
                   "prepared_at": time.time(), "redaction_count": len(sanitizer.mapping)}
+        if delta is not None:
+            record["git_delta"] = delta
         job = private_dir(self.private / rid)
         try:
             write_new(job / "candidate.json", canonical(wrapper))
@@ -329,7 +358,8 @@ class LocalStore:
             shutil.rmtree(job)
             raise
         return {"request_id": rid, "status": "prepared", "bundle_sha256": wrapper["bundle_sha256"],
-                "files": len(documents), "redaction_count": len(sanitizer.mapping), "skipped": skipped}
+                "files": len(documents), "redaction_count": len(sanitizer.mapping), "skipped": skipped,
+                **({"public_baseline": baseline} if baseline is not None else {})}
 
     def check_source(self, rid: str) -> dict:
         p = read_json(self._private_job(rid) / "provenance.json")
@@ -342,8 +372,16 @@ class LocalStore:
                 same = False
             if not same:
                 changed.append(record["relative_path"])
-        return {"request_id": rid, "unchanged": not changed, "changed_files": changed,
-                "scope": "selected files only; unselected project files are not checked"}
+        git_changed = False
+        if "git_delta" in p:
+            try:
+                git_changed = working_delta(Path(p["project_root"]), p["git_delta"]["baseline_sha"]) != p["git_delta"]
+            except (BridgeError, OSError):
+                git_changed = True
+        return {"request_id": rid, "unchanged": not changed and not git_changed, "changed_files": changed,
+                **({"git_delta_changed": git_changed} if "git_delta" in p else {}),
+                "scope": ("selected file contents plus Git HEAD and overlay path/status/mode changes; omitted contents are not checked"
+                          if "git_delta" in p else "selected files only; unselected project files are not checked")}
 
     def publish(self, rid: str, *, approve: bool = False, allow_submit: bool = True) -> dict:
         job = self._private_job(rid)

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Ultraplan"
+  short_description: "Review a plan through ChatGPT Pro and a constrained MCP outbox"
+  default_prompt: "Use $ultraplan to prepare a sanitized plan review with my approved policy, hand it to ChatGPT Pro, and receive the result without modifying the source project."
+policy:
+  allow_implicit_invocation: false

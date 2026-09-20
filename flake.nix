@@ -23,7 +23,10 @@
           pyproject = true;
           src = ./.;
           build-system = [ pkgs.python3Packages.setuptools ];
-          nativeCheckInputs = [ pkgs.python3Packages.unittestCheckHook ];
+          nativeCheckInputs = [
+            pkgs.python3Packages.unittestCheckHook
+            pkgs.git
+          ];
           unittestFlagsArray = [
             "-s"
             "tests"
