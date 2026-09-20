@@ -20,6 +20,8 @@ Packaging:
   `programs.chatgpt-linker.enable`. The module owns the shared agent and Claude
   skill paths; consumers select `skillTargets` instead of copying source paths.
   Source snapshots include the flake and its Home Manager module.
+- `programs.chatgpt-linker.skillDirectories.agents` and `.claude` override
+  installation parent directories independently; the module appends `/ultraplan`.
 
 Waiting uses a bounded review budget:
 

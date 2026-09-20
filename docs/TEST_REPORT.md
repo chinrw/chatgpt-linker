@@ -14,6 +14,8 @@ skill 已在仓库中更名为 `ultraplan`，安装和源码快照测试使用�
 
 Home Manager 模块通过实际 HM 模块系统验证：关闭模块、默认双目录、仅共享目录、仅 CLI 和 package 覆盖均符合配置；合成 generation 中的两个 skill 链接与仓库文件一致。`nix flake check` 在 x86_64-linux 通过，包构建内的 120 项测试也通过；这些构建未执行 HM 激活。源码快照测试另核对了 flake、锁文件和 HM 模块的包含关系。
 
+目录覆盖另通过合成 HM generation 构建验证：单独覆盖 Claude 父目录保留共享目录默认值；两个目录分别覆盖、HOME 内绝对路径、未启用目标不生成链接均通过。生成的 skill 内容与仓库一致；未改动当前用户的安装路径。
+
 实际 `gh api repos/chinrw/chatgpt-linker` 返回 `private=false`、`visibility=public`。新 `repo-info` 命令的匿名 API 验证返回 HTTP 403，响应头 `x-ratelimit-remaining=0`；移除代理后的直连尝试也未成功。因此本次未完成其真实联网成功路径；失败没有降级为整仓传输。真实 ChatGPT 对固定 commit URL 的读取与结果回传仍未验证。
 
 ## 历史交付记录（Linux，CPython 3.13.5）

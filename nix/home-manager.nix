@@ -9,7 +9,7 @@ let
   cfg = config.programs.chatgpt-linker;
   skillName = "ultraplan";
   skillSource = ../skills + "/${skillName}";
-  skillDirectories = {
+  defaultSkillDirectories = {
     agents = ".agents/skills";
     claude = ".claude/skills";
   };
@@ -26,7 +26,7 @@ in
     };
 
     skillTargets = lib.mkOption {
-      type = lib.types.listOf (lib.types.enum (builtins.attrNames skillDirectories));
+      type = lib.types.listOf (lib.types.enum (builtins.attrNames defaultSkillDirectories));
       default = [
         "agents"
         "claude"
@@ -37,6 +37,16 @@ in
         directory. An empty list installs only the CLI.
       '';
     };
+
+    skillDirectories = lib.mapAttrs (target: directory: lib.mkOption {
+      type = lib.types.nonEmptyStr;
+      default = directory;
+      description = ''
+        Parent directory for the ${target} skill link, relative to
+        home.homeDirectory or an absolute path inside it. The module appends
+        /ultraplan. The target must also be selected in skillTargets.
+      '';
+    }) defaultSkillDirectories;
   };
 
   config = lib.mkIf cfg.enable {
@@ -49,7 +59,7 @@ in
 
     home.packages = [ cfg.package ];
     home.file = lib.genAttrs (
-      map (target: "${skillDirectories.${target}}/${skillName}") (lib.unique cfg.skillTargets)
+      map (target: "${cfg.skillDirectories.${target}}/${skillName}") (lib.unique cfg.skillTargets)
     ) (_: {
       source = skillSource;
     });

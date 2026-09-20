@@ -71,6 +71,17 @@ Home Manager 可直接导入本仓库的模块，让 CLI 和 skill 路径随同�
 
 默认安装 CLI，并将 `ultraplan` 链接到 `~/.agents/skills/ultraplan` 和 `~/.claude/skills/ultraplan`。可设置 `programs.chatgpt-linker.skillTargets = [ "agents" ];` 只安装共享 skill，或设为 `[]` 只安装 CLI；`package` 可覆盖 CLI 包。模块不配置 tunnel、凭据、MCP 注册或项目发布 policy。
 
+`skillDirectories` 可分别覆盖安装父目录，模块自动追加 `/ultraplan`。路径可以相对于 HOME，或使用 HOME 内的绝对路径；只覆盖一项不会改变另一项的默认值。例如，Claude 已配置使用自定义配置目录时：
+
+```nix
+programs.chatgpt-linker = {
+  enable = true;
+  skillDirectories.claude = ".config/claude/skills";
+};
+```
+
+这会把 Claude 的 skill 链接放在 `~/.config/claude/skills/ultraplan`；共享目录仍为 `~/.agents/skills/ultraplan`。`skillDirectories.agents` 同样可覆盖。该选项只控制文件安装位置，不改变 agent 的目录发现配置；目标也必须在 `skillTargets` 中启用。
+
 从手动接入迁移时，删除下游重复的 CLI package 条目、旧 `rethink-plan` / `ultraplan` 的 `home.file` 定义及自定义 skill 激活注册，统一交给此模块。更新下游锁定的 `chatgpt-linker` input 后再执行 HM switch；只更新 input 不会自动替换旧配置。模块在求值时检查 skill 的 `SKILL.md` 是否存在，避免把错误路径带到激活阶段。
 
 Codex、Claude Code 的 MCP 注册和 tunnel-client 的 `mcp.commands` 继续使用稳定路径 `~/.nix-profile/bin/chatgpt-linker`。
