@@ -28,6 +28,14 @@ $ultraplan
 
 agent 先用 `repo-info --repo /abs/project` 核验公开 GitHub 仓库及基线 SHA。成功后用 `prepare --public-repo --remote NAME --base SHA`，携带当前 context、计划、公开固定版本引用及本地增量；未变化的源码无需重复传递。私有或无法核验的仓库按任务需要使用本地 `--file` 材料，不能因联网失败而静默改成整仓上传。具体选择规则见 [README 的公开仓库流程](../README.md#公开仓库固定版本引用和本地增量)。
 
+## 传递本地有效规则
+
+host agent 从当前会话和实际适用的 user-scope、仓库、子目录规则中提取约束，按本 host 的指令优先级处理冲突，在 draft 中写入 `Effective task rules`。摘要包括 README/文档和注释的写作要求、commit 的仓库惯例及标题/正文/trailer 规则，以及实现范围、接口和测试要求，并标注来源层级与适用范围。规则来源可以是 `AGENTS.md`、本地覆盖或 host 对应的 `CLAUDE.md`，不假设所有 host 使用同一目录或优先级。
+
+即使仓库公开且没有本地代码改动，也要传这份摘要，因为 user-scope 规则可能在仓库之外。全局规则文件、私人绝对路径和无关配置不整份外发；签名身份只传规则模板，实际姓名/邮箱在本地生成 commit 时读取。CLI 扫描和冻结摘要，但不自动发现规则，也不跟踪原始规则文件的后续变化。
+
+已有计划用 `--file PLAN.md` 单独选入，`--draft-stdin` 保留当前 context 和规则摘要并引用计划；无需改写源计划或放宽 policy 去读取仓库外文件。复核方按这些约束审查和草拟文字，本地 agent 接续实现时再次核对当前规则，避免报告中的 README、注释或 commit message 覆盖原有要求。
+
 ## 其他 host（Claude Code、pi、opencode）
 
 skill 只有一个 `SKILL.md`（Agent Skills 通用格式）加一个 Codex 专用的 `agents/openai.yaml`；后者其他 host 会忽略。正文只依赖 `chatgpt-linker` CLI 在 PATH 上，不依赖 Codex。

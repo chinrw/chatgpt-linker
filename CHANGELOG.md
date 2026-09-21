@@ -51,6 +51,9 @@ Selection is more automatic:
 - After validating a completed review, ultraplan resumes implementation and
   tests when the original task already authorized them. Review-only requests
   still end with the plan; unverified model provenance is not a stop condition.
+- Ultraplan carries effective user-scope and project rules in the draft context,
+  including README/docs, comment, and commit-message requirements. Existing
+  plans remain separate evidence files; global rule files are not uploaded whole.
 
 ## 0.1.0 — 2026-09-17
 

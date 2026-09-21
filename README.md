@@ -120,6 +120,8 @@ chatgpt-linker prompt "$RID"
 
 显式调用 `$ultraplan` 已授权本次复审所需材料的准备和发布，agent 无需再要求你回复一次确认。首次缺少 policy 时，agent 可按本次范围创建 policy 并执行 `publish --approve`；长期 `auto_publish` 和已有 policy 的范围扩大仍需相应授权。
 
+每次复核的 context 都包含 `Effective task rules`：由本地 agent 按当前 host 的优先级汇总会话、user-scope、仓库及相关子目录的有效规则，涵盖 README/文档、代码注释、commit message 和验证要求。公开仓库也携带这份摘要；不会把全局规则文件和私人配置整份上传。CLI 不会自动发现这些规则，收集与后续执行由 skill 指导 host agent 完成。
+
 ### 公开仓库：固定版本引用和本地增量
 
 GitHub 公开仓库可以只传当前 context、计划和相对公开基线发生变化的文件，未变化的源码由复审方按固定 commit URL 阅读。CLI 使用匿名 GitHub API 核验仓库可见性和 commit 可读性，不依据 README 或远端地址猜测。

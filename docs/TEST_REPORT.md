@@ -1,8 +1,14 @@
 # Verification report — v0.1.0
 
-最新核实日期：2026-09-20。本文件记录不同环境下的独立核实，结论分别按环境标注；无法在本机复现的环境只作为记录保留。
+最新核实日期：2026-09-21。本文件记录不同环境下的独立核实，结论分别按环境标注；无法在本机复现的环境只作为记录保留。
 
-## 当前本地复核（2026-09-20，Linux，CPython 3.14.7）
+## 有效规则交接（2026-09-21，Linux，CPython 3.14.7）
+
+120 项 unittest 通过。另用临时合成仓库验证普通材料和公开增量两种模式：`Effective task rules` 中的 README/文档、注释及 commit message 规则经过 prepare/publish/fetch 后保留，材料 hash 一致，单独选入的原计划未被修改，仓库外的合成全局规则文件没有进入 bundle。公开 API 使用模拟响应。
+
+交接提示和 request 契约要求复核方应用这些规则；尚未用真实 ChatGPT 会话验证本次新增规则的遵循效果。本地检查不能证明模型一定按摘要生成文字。
+
+## 本地复核记录（2026-09-20，Linux，CPython 3.14.7）
 
 `PYTHONPATH=src python -m unittest discover -s tests -v`：120 项通过。首次沙箱运行有 6 项 HTTP 测试因无法创建 loopback socket 报 `PermissionError`；允许本机 socket 后完整重跑通过。
 
