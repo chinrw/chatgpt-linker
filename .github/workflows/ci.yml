@@ -56,6 +56,3 @@ jobs:
       # invocation and no reliance on the runner's global site-packages.
       - name: Build wheel from source
         run: uv build --wheel --out-dir dist
-
-  # Publishing to a real GitHub repository is intentionally manual: this
-  # repository never creates repositories or pushes on your behalf.

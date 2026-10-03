@@ -147,7 +147,7 @@ NixOS 的 `services.chatgpt-linker` 和 HM 的 `programs.chatgpt-linker.tunnel` 
 | `package` | Linker CLI 包，可覆盖 |
 | `tunnelPackage` | 固定版本的 tunnel-client 包，可覆盖 |
 
-Linux 的 `packages.tunnel-client` 来自独立的 [tunnel-client-nix](https://github.com/chinrw/tunnel-client-nix) flake，其 CI 检测官方发布并在四个平台测试通过后合并更新。运行 `nix flake update tunnel-client-nix` 更新锁定版本，再构建并激活配置。使用方只需声明 Linker input；若要在 Linker 发布新的锁文件前更新客户端，可运行 `nix flake update chatgpt-linker/tunnel-client-nix`，再验证构建。CLI 和 skill 仍支持原有 Darwin 平台，tunnel 服务模块目前仅支持 Linux。
+Linux 的 `packages.tunnel-client` 来自独立的 [tunnel-client-nix](https://github.com/chinrw/tunnel-client-nix) flake，其 CI 检测官方发布并在四个平台测试通过后合并更新。Linker 的 CI 每小时检查这个依赖，在 Linux 上通过 `nix flake check`（包括 Python 测试、服务模块测试与客户端检查）后提交锁文件。使用方只需更新 Linker input，再构建并激活配置，无需知道内部客户端依赖的名称。维护者可手动触发 `Update tunnel dependency` 验证当前候选；若 main 在测试期间前进，推送会失败并等待下次检查。CLI 和 skill 仍支持原有 Darwin 平台，tunnel 服务模块目前仅支持 Linux。
 
 完成对应的系统或 HM switch 后，以服务用户运行：
 
