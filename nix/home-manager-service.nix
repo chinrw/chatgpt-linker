@@ -6,10 +6,13 @@
   ...
 }:
 let
-  cfg = config.services.chatgpt-linker;
+  cfg = config.programs.chatgpt-linker.tunnel;
 in
 {
-  options.services.chatgpt-linker = import ./tunnel-options.nix {
+  imports = [
+    (lib.mkRenamedOptionModule [ "services" "chatgpt-linker" ] [ "programs" "chatgpt-linker" "tunnel" ])
+  ];
+  options.programs.chatgpt-linker.tunnel = import ./tunnel-options.nix {
     inherit lib;
     defaultPackage = config.programs.chatgpt-linker.package;
     defaultTunnelPackage = self.packages.${pkgs.stdenv.hostPlatform.system}.tunnel-client;
@@ -17,6 +20,10 @@ in
   };
   config = lib.mkIf cfg.enable {
     assertions = [
+      {
+        assertion = config.programs.chatgpt-linker.enable;
+        message = "programs.chatgpt-linker.tunnel requires programs.chatgpt-linker.enable.";
+      }
       {
         assertion = pkgs.stdenv.hostPlatform.isLinux;
         message = "The ChatGPT Linker tunnel user service requires Linux.";

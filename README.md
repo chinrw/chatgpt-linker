@@ -116,23 +116,27 @@ NixOS 可以为已有用户提供服务，并自动启用该用户的 linger：
 
 此例假设系统已经配置 sops-nix 和解密 key。也可以将 `apiKeyFile` 设为已有运行时文件的绝对路径，模块不依赖特定 secret manager。NixOS 安装的是 user unit，`ConditionUser` 限制只有指定账号能够启动它，服务不以 root 运行。
 
-在非 NixOS 的 Linux 上，导入 `homeManagerModules.default` 后使用同一接口，省略 `user`：
+Home Manager 用户导入 `homeManagerModules.default` 后，将可选 tunnel 放在程序配置下：
 
 ```nix
 { config, ... }:
 {
-  programs.chatgpt-linker.enable = true;
-  services.chatgpt-linker = {
+  programs.chatgpt-linker = {
     enable = true;
-    tunnelId = "tunnel_example";
-    apiKeyFile = "${config.xdg.configHome}/tunnel-client/api-key";
+    tunnel = {
+      enable = true;
+      tunnelId = "tunnel_example";
+      apiKeyFile = "${config.xdg.configHome}/tunnel-client/api-key";
+    };
   };
 }
 ```
 
-Home Manager 不修改系统 linger 设置。需要退出登录后继续运行时，由管理员为该用户启用 linger。同一账号只选择一个服务模块，避免 HM 的同名 unit 遮蔽 NixOS 提供的版本。从手工服务迁移前先备份旧 unit 和凭据；从 HM 迁到 NixOS 时先停用 HM 的 `services.chatgpt-linker` 并完成 HM switch，再启用 NixOS 模块。
+Home Manager 不修改系统 linger 设置。需要退出登录后继续运行时，由管理员为该用户启用 linger。同一账号只选择一个服务模块，避免 HM 的同名 unit 遮蔽 NixOS 提供的版本。从手工服务迁移前先备份旧 unit 和凭据；从 HM 迁到 NixOS 时先停用 HM 的 `programs.chatgpt-linker.tunnel` 并完成 HM switch，再启用 NixOS 模块。
 
-两个模块都提供这些选项：
+只启用 `programs.chatgpt-linker.enable` 会安装 CLI 和 skill，不启动 tunnel，也不要求密钥。启用 tunnel 时必须同时启用程序。旧的 HM `services.chatgpt-linker` 路径保留为迁移别名。
+
+NixOS 的 `services.chatgpt-linker` 和 HM 的 `programs.chatgpt-linker.tunnel` 提供这些选项：
 
 | 选项 | 用途与默认值 |
 |---|---|
@@ -143,7 +147,7 @@ Home Manager 不修改系统 linger 设置。需要退出登录后继续运行�
 | `package` | Linker CLI 包，可覆盖 |
 | `tunnelPackage` | 固定版本的 tunnel-client 包，可覆盖 |
 
-Linux 的 `packages.tunnel-client` 来自独立的 [tunnel-client-nix](https://github.com/chinrw/tunnel-client-nix) flake，其 CI 检测官方发布并在四个平台测试通过后合并更新。运行 `nix flake update tunnel-client-nix` 更新锁定版本，再构建并激活配置。配置仓库可以声明同名顶层 input，并设置 `chatgpt-linker.inputs.tunnel-client-nix.follows = "tunnel-client-nix"`，让现有 updater 独立更新客户端。CLI 和 skill 仍支持原有 Darwin 平台，tunnel 服务模块目前仅支持 Linux。
+Linux 的 `packages.tunnel-client` 来自独立的 [tunnel-client-nix](https://github.com/chinrw/tunnel-client-nix) flake，其 CI 检测官方发布并在四个平台测试通过后合并更新。运行 `nix flake update tunnel-client-nix` 更新锁定版本，再构建并激活配置。使用方只需声明 Linker input；若要在 Linker 发布新的锁文件前更新客户端，可运行 `nix flake update chatgpt-linker/tunnel-client-nix`，再验证构建。CLI 和 skill 仍支持原有 Darwin 平台，tunnel 服务模块目前仅支持 Linux。
 
 完成对应的系统或 HM switch 后，以服务用户运行：
 

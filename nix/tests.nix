@@ -75,17 +75,28 @@ let
       ];
     };
   os = nixos { };
-  hm = home-manager.lib.homeManagerConfiguration {
-    inherit pkgs;
-    modules = [
-      self.homeManagerModules.default
-      {
-        home.username = "alice";
-        home.homeDirectory = "/home/alice";
-        home.stateVersion = "26.05";
-        services.chatgpt-linker = settings;
-      }
-    ];
+  mkHome =
+    extra:
+    home-manager.lib.homeManagerConfiguration {
+      inherit pkgs;
+      modules = [
+        self.homeManagerModules.default
+        {
+          home.username = "alice";
+          home.homeDirectory = "/home/alice";
+          home.stateVersion = "26.05";
+          programs.chatgpt-linker.enable = true;
+        }
+        extra
+      ];
+    };
+  hm = mkHome { programs.chatgpt-linker.tunnel = settings; };
+  cliOnly = mkHome { };
+  tunnelOnly = mkHome {
+    programs.chatgpt-linker = {
+      enable = lib.mkForce false;
+      tunnel = settings;
+    };
   };
   off = nixpkgs.lib.nixosSystem {
     system = pkgs.stdenv.hostPlatform.system;
@@ -108,11 +119,13 @@ let
   service = os.config.systemd.user.services.chatgpt-linker.serviceConfig;
   realService = import ./tunnel-service.nix {
     inherit lib pkgs;
-    cfg = hm.config.services.chatgpt-linker // {
+    cfg = hm.config.programs.chatgpt-linker.tunnel // {
       package = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
     };
   };
 in
+assert !(cliOnly.config.systemd.user.services ? chatgpt-linker);
+assert !(builtins.tryEval tunnelOnly.activationPackage.drvPath).success;
 assert os.config.users.users.alice.linger;
 assert os.config.systemd.user.services.chatgpt-linker.unitConfig.ConditionUser == "alice";
 assert !(off.config.systemd.user.services ? chatgpt-linker);
