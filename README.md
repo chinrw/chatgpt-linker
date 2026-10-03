@@ -71,7 +71,7 @@ Home Manager 可直接导入本仓库的模块，让 CLI 和 skill 路径随同�
 }
 ```
 
-默认安装 CLI，并将 `ultraplan` 链接到 `~/.agents/skills/ultraplan` 和 `~/.claude/skills/ultraplan`。可设置 `programs.chatgpt-linker.skillTargets = [ "agents" ];` 只安装共享 skill，或设为 `[]` 只安装 CLI；`package` 可覆盖 CLI 包。模块不配置 tunnel、凭据、MCP 注册或项目发布 policy。
+默认安装 CLI，并将 `ultraplan` 链接到 `~/.agents/skills/ultraplan` 和 `~/.claude/skills/ultraplan`。可设置 `programs.chatgpt-linker.skillTargets = [ "agents" ];` 只安装共享 skill，或设为 `[]` 只安装 CLI；`package` 可覆盖 CLI 包。仅启用这个选项不会启动 tunnel，也不会创建凭据、MCP 注册或项目发布 policy。
 
 `skillDirectories` 可分别覆盖安装父目录，模块自动追加 `/ultraplan`。路径可以相对于 HOME，或使用 HOME 内的绝对路径；只覆盖一项不会改变另一项的默认值。例如，Claude 已配置使用自定义配置目录时：
 
@@ -86,7 +86,76 @@ programs.chatgpt-linker = {
 
 从手动接入迁移时，删除下游重复的 CLI package 条目、旧 `rethink-plan` / `ultraplan` 的 `home.file` 定义及自定义 skill 激活注册，统一交给此模块。更新下游锁定的 `chatgpt-linker` input 后再执行 HM switch；只更新 input 不会自动替换旧配置。模块在求值时检查 skill 的 `SKILL.md` 是否存在，避免把错误路径带到激活阶段。
 
-Codex、Claude Code 的 MCP 注册和 tunnel-client 的 `mcp.commands` 继续使用稳定路径 `~/.nix-profile/bin/chatgpt-linker`。
+Codex、Claude Code 的本地 MCP 注册可继续使用稳定路径 `~/.nix-profile/bin/chatgpt-linker`。下面的服务模块会自动生成 tunnel 的 MCP 命令，不需要手写 launcher。
+
+### 用 Nix 管理 tunnel 用户服务
+
+先在 OpenAI 创建 tunnel，并在目标节点安全提供运行时 API key 文件。密钥文件必须由运行用户可读，不要用 `builtins.readFile` 将内容写入 Nix 配置。模块不创建或发布 review 任务，也不注册 tunnel。
+
+NixOS 可以为已有用户提供服务，并自动启用该用户的 linger：
+
+```nix
+{ config, inputs, ... }:
+{
+  imports = [ inputs.chatgpt-linker.nixosModules.default ];
+
+  services.chatgpt-linker = {
+    enable = true;
+    user = "alice"; # 使用系统中已有的非 root 账号。
+    tunnelId = "tunnel_example";
+    apiKeyFile = config.sops.secrets.linker-tunnel-key.path;
+  };
+
+  sops.secrets.linker-tunnel-key = {
+    sopsFile = ./secrets.yaml;
+    owner = "alice";
+    mode = "0400";
+  };
+}
+```
+
+此例假设系统已经配置 sops-nix 和解密 key。也可以将 `apiKeyFile` 设为已有运行时文件的绝对路径，模块不依赖特定 secret manager。NixOS 安装的是 user unit，`ConditionUser` 限制只有指定账号能够启动它，服务不以 root 运行。
+
+在非 NixOS 的 Linux 上，导入 `homeManagerModules.default` 后使用同一接口，省略 `user`：
+
+```nix
+{ config, ... }:
+{
+  programs.chatgpt-linker.enable = true;
+  services.chatgpt-linker = {
+    enable = true;
+    tunnelId = "tunnel_example";
+    apiKeyFile = "${config.xdg.configHome}/tunnel-client/api-key";
+  };
+}
+```
+
+Home Manager 不修改系统 linger 设置。需要退出登录后继续运行时，由管理员为该用户启用 linger。同一账号只选择一个服务模块，避免 HM 的同名 unit 遮蔽 NixOS 提供的版本。从手工服务迁移前先备份旧 unit 和凭据；从 HM 迁到 NixOS 时先停用 HM 的 `services.chatgpt-linker` 并完成 HM switch，再启用 NixOS 模块。
+
+两个模块都提供这些选项：
+
+| 选项 | 用途与默认值 |
+|---|---|
+| `tunnelId` | 必填，已有 tunnel ID，会进入 Nix store；不要把密钥填在这里 |
+| `apiKeyFile` | 必填，Nix store 之外的运行时绝对路径，只保存路径、不复制内容 |
+| `exchangeDirectory` | 默认为用户 state 目录下的 `chatgpt-linker/exchange`；必须与准备任务的 CLI 一致 |
+| `healthPort` | 默认 `8080`，只监听 `127.0.0.1` |
+| `package` | Linker CLI 包，可覆盖 |
+| `tunnelPackage` | 固定版本的 tunnel-client 包，可覆盖 |
+
+Linux x86_64/aarch64 的 `packages.tunnel-client` 封装官方 `0.0.14` 发布包，保留配套 cloudflared、manifest 和许可证文件，下载由固定 SHA-256 校验。更新版本需要显式更新 URL 和 hash，没有安装时自更新脚本。CLI 和 skill 仍支持 flake 原有的 Darwin 平台，tunnel 服务模块目前仅支持 Linux。
+
+完成对应的系统或 HM switch 后，以服务用户运行：
+
+```sh
+systemctl --user status chatgpt-linker
+journalctl --user -u chatgpt-linker
+curl --fail http://127.0.0.1:8080/readyz
+```
+
+轮换凭据后让 secret manager 先生成新文件，再执行 `systemctl --user restart chatgpt-linker`。不要将 user unit 名称直接填入只操作系统服务的 secret restart hook。
+
+服务为 exchange、inbox、outbox 建立 `0700` 目录。MCP 子进程使用空环境和私有运行目录作为 HOME，不继承 tunnel 的环境变量。这不是文件系统沙箱：同一 UID 仍有该账号的文件访问权限。健康检查成功也不等于真实 ChatGPT 任务已验收，仍需完成下面的合成任务流程和真实账号测试。
 
 ## 第一次：用仓库内的合成示例
 

@@ -15,6 +15,7 @@ let
   };
 in
 {
+  imports = [ (import ./home-manager-service.nix { inherit self; }) ];
   options.programs.chatgpt-linker = {
     enable = lib.mkEnableOption "ChatGPT Linker and its ultraplan skill";
 

@@ -4,7 +4,9 @@
 
 这是一个单用户、私有连接的 Python 程序。无需模型 API，也没有常驻模型调度器。进程分为本地 CLI、远程证据 MCP，以及可选本地控制 MCP；复用同一存储层。
 
-flake 导出 `homeManagerModules.default`（同 `homeManagerModules.chatgpt-linker`）。模块位于 `nix/home-manager.nix`，通过 `programs.chatgpt-linker.enable` 安装 CLI，并按 `skillTargets` 声明共享 agent / Claude 的 skill 链接。默认两处都启用；空列表只安装 CLI。`skillDirectories.agents` / `.claude` 分别控制父目录，模块追加 `/ultraplan`；未覆盖的目录保留默认值。目标路径遵循 HM 的 HOME 内文件管理规则。它只负责安装，不创建任务、发布授权、凭据或 tunnel 服务。使用方移除旧 skill 激活注册后，链接随 HM generation 更新。
+flake 导出 `homeManagerModules.default`（同 `homeManagerModules.chatgpt-linker`）。模块位于 `nix/home-manager.nix`，通过 `programs.chatgpt-linker.enable` 安装 CLI，并按 `skillTargets` 声明共享 agent / Claude 的 skill 链接。默认两处都启用；空列表只安装 CLI。`skillDirectories.agents` / `.claude` 分别控制父目录，模块追加 `/ultraplan`；未覆盖的目录保留默认值。目标路径遵循 HM 的 HOME 内文件管理规则。使用方移除旧 skill 激活注册后，链接随 HM generation 更新。
+
+可选的 `services.chatgpt-linker` 由 `nix/home-manager-service.nix` 和 `nix/nixos.nix` 分别接入 HM 与 NixOS。NixOS 模块通过 `nixosModules.default` 导出，设置指定用户的 linger 和 unit 的 `ConditionUser`。两者共用 `tunnel-options.nix` 与 `tunnel-service.nix`，避免认证参数和环境清理逻辑在两种部署中分歧。模块只引用运行时密钥路径，不读取密钥、不创建任务或发布授权。`tunnel-client.nix` 固定官方 Linux 发布包及配套文件；`nix/tests.nix` 使用真实模块求值、模拟 tunnel 进程和真实本地 stdio 协议检查，不联系 OpenAI。
 
 ```text
 src/chatgpt_linker/
