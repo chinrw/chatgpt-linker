@@ -81,11 +81,11 @@
         "nixpkgs-darwin": "nixpkgs-darwin"
       },
       "locked": {
-        "lastModified": 1790314364,
-        "narHash": "sha256-26VAYSUGTP5FnTeRm0AeU6TLy039auiKljlFcQ7PKIE=",
+        "lastModified": 1791010173,
+        "narHash": "sha256-kX+C7d+p29ChmV3ZCUszEb3xYjhbn1+Bwr9OMQfxAzI=",
         "owner": "chinrw",
         "repo": "tunnel-client-nix",
-        "rev": "72ec33f48ec7e1a55f4dfabe9decc6ce6d493b3b",
+        "rev": "1622dc885b8e4f37b53a99c04c50f399f07c268d",
         "type": "github"
       },
       "original": {
