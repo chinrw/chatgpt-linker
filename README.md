@@ -143,7 +143,7 @@ Home Manager 不修改系统 linger 设置。需要退出登录后继续运行�
 | `package` | Linker CLI 包，可覆盖 |
 | `tunnelPackage` | 固定版本的 tunnel-client 包，可覆盖 |
 
-Linux x86_64/aarch64 的 `packages.tunnel-client` 封装官方 `0.0.14` 发布包，保留配套 cloudflared、manifest 和许可证文件，下载由固定 SHA-256 校验。更新版本需要显式更新 URL 和 hash，没有安装时自更新脚本。CLI 和 skill 仍支持 flake 原有的 Darwin 平台，tunnel 服务模块目前仅支持 Linux。
+Linux 的 `packages.tunnel-client` 来自独立的 [tunnel-client-nix](https://github.com/chinrw/tunnel-client-nix) flake，其 CI 检测官方发布并在四个平台测试通过后合并更新。运行 `nix flake update tunnel-client-nix` 更新锁定版本，再构建并激活配置。配置仓库可以声明同名顶层 input，并设置 `chatgpt-linker.inputs.tunnel-client-nix.follows = "tunnel-client-nix"`，让现有 updater 独立更新客户端。CLI 和 skill 仍支持原有 Darwin 平台，tunnel 服务模块目前仅支持 Linux。
 
 完成对应的系统或 HM switch 后，以服务用户运行：
 

@@ -2,6 +2,7 @@
   description = "Plan review handoffs to ChatGPT Pro through a constrained MCP outbox";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+  inputs.tunnel-client-nix.url = "github:chinrw/tunnel-client-nix";
   inputs.home-manager = {
     url = "github:nix-community/home-manager";
     inputs.nixpkgs.follows = "nixpkgs";
@@ -12,6 +13,7 @@
       self,
       nixpkgs,
       home-manager,
+      tunnel-client-nix,
     }:
     let
       systems = [
@@ -61,7 +63,7 @@
           default = chatgpt-linker;
         }
         // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
-          tunnel-client = pkgs.callPackage ./nix/tunnel-client.nix { };
+          tunnel-client = tunnel-client-nix.packages.${pkgs.stdenv.hostPlatform.system}.tunnel-client;
         }
       );
 
@@ -84,7 +86,7 @@
             ${self.packages.${pkgs.stdenv.hostPlatform.system}.tunnel-client}/bin/tunnel-client --version
             test -f ${
               self.packages.${pkgs.stdenv.hostPlatform.system}.tunnel-client
-            }/bin/cloudflared-manifest.json
+            }/libexec/tunnel-client/cloudflared-manifest.json
             touch "$out"
           '';
         }

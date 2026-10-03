@@ -12,7 +12,7 @@ in
   options.services.chatgpt-linker = import ./tunnel-options.nix {
     inherit lib;
     defaultPackage = config.programs.chatgpt-linker.package;
-    defaultTunnelPackage = pkgs.callPackage ./tunnel-client.nix { };
+    defaultTunnelPackage = self.packages.${pkgs.stdenv.hostPlatform.system}.tunnel-client;
     defaultExchangeDirectory = "${config.xdg.stateHome}/chatgpt-linker/exchange";
   };
   config = lib.mkIf cfg.enable {

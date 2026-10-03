@@ -36,10 +36,62 @@
         "type": "github"
       }
     },
+    "nixpkgs-darwin": {
+      "locked": {
+        "lastModified": 1788645589,
+        "narHash": "sha256-efzwl1LfOTAneLY06gmqeYS4vroDR1utvBqstsdvZyQ=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "8b6d0ac8759bbc2499386ef5bcd7f11ee7f7ff52",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixpkgs-26.05-darwin",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_2": {
+      "locked": {
+        "lastModified": 1788686502,
+        "narHash": "sha256-C5ETRqK0ji2SGGVpjdsAIv+Yd6m4vB6DOiGPQXP/M34=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "94a0f8d9ca5da101ec1cddbdfecfdc1ae1766d04",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixpkgs-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "home-manager": "home-manager",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "tunnel-client-nix": "tunnel-client-nix"
+      }
+    },
+    "tunnel-client-nix": {
+      "inputs": {
+        "nixpkgs": "nixpkgs_2",
+        "nixpkgs-darwin": "nixpkgs-darwin"
+      },
+      "locked": {
+        "lastModified": 1790314364,
+        "narHash": "sha256-26VAYSUGTP5FnTeRm0AeU6TLy039auiKljlFcQ7PKIE=",
+        "owner": "chinrw",
+        "repo": "tunnel-client-nix",
+        "rev": "72ec33f48ec7e1a55f4dfabe9decc6ce6d493b3b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "chinrw",
+        "repo": "tunnel-client-nix",
+        "type": "github"
       }
     }
   },

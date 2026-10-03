@@ -14,7 +14,7 @@ in
     (import ./tunnel-options.nix {
       inherit lib;
       defaultPackage = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
-      defaultTunnelPackage = pkgs.callPackage ./tunnel-client.nix { };
+      defaultTunnelPackage = self.packages.${pkgs.stdenv.hostPlatform.system}.tunnel-client;
       defaultExchangeDirectory = "${userHome}/.local/state/chatgpt-linker/exchange";
     })
     // {
