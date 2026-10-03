@@ -14,6 +14,48 @@ class SanitizationTests(Fixture):
             with self.subTest(sample_category=sample[:5]):
                 self.assertTrue(scan(sample))
 
+    def test_environment_style_and_vendor_credentials(self):
+        # Synthetic values assembled at runtime so this file does not trip the scanner itself.
+        hexval = '9f8e7d6c5b4a3928' * 2
+        samples = {
+            'OPENAI_API_KEY=' + hexval: 'credential-assignment',
+            'AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCY' + 'Q1w2E3r4': 'credential-assignment',
+            'GITHUB_TOKEN=' + hexval: 'credential-assignment',
+            'DB_PASSWORD=hunter2hunter2': 'credential-assignment',
+            'auth_token: "' + hexval + '"': 'credential-assignment',
+            'Authorization: Bearer ' + hexval: 'bearer-token',
+            'AIza' + 'S' * 35: 'google-api-key',
+            'sk_live_' + 'a1' * 10: 'stripe-key',
+            'glpat-' + 'b2' * 10: 'gitlab-token',
+            'hf_' + 'c3' * 16: 'huggingface-token',
+            'npm_' + 'd4' * 18: 'npm-token',
+            'pypi-AgE' + 'e5' * 26: 'pypi-token',
+            'https://hooks.slack.com/services/T0/B0/' + 'X' * 24: 'slack-webhook',
+            'AccountKey=' + 'f6' * 16: 'azure-account-key',
+            'sk-ant-api03-' + 'g7' * 12: 'sk-api-key',
+            'password = correcthorsebatterystaple': 'credential-assignment',
+            '  password: hunterhunter  # yaml': 'credential-assignment',
+            'export DB_PASSWORD=Sup3rS3cretValue': 'credential-assignment',
+            'secret = "AB12-CD34-EF56"': 'credential-assignment',
+            'password = "Pa<ss>w&rd*1"': 'credential-assignment',
+        }
+        for sample, label in samples.items():
+            with self.subTest(label=label):
+                self.assertIn(label, scan(sample))
+
+    def test_code_expressions_and_fixtures_not_flagged(self):
+        samples = ['token = secrets.token_urlsafe(48)', 'password = getpass()', 'self.bot_token = bot_token',
+                   'let token = match cb.admit(0.0) {', 'bot_token: String,',
+                   'def login(password: str, token: Optional[str]):', 'secret = os.urandom(32)',
+                   'csrf_token = request.form["csrf_token"]', 'password = "test-password"',
+                   'api_key = "your-api-key-here"', 'API_KEY=xxxxxxxx', 'tokenizer = load()',
+                   'Use Bearer token-based-authentication here', 'token: Option<CancelToken>,',
+                   'fn new(api_key: &str)', 'secret = "CANARY_NEVER_LOG_PAYLOAD"', 'token = "TASK13_STREAM_KEY"',
+                   'API_KEY=sk-ant-...', 'password = "top-secret"']
+        for sample in samples:
+            with self.subTest(sample=sample):
+                self.assertEqual(scan(sample), [])
+
     def test_env_references_and_placeholders(self):
         self.assertEqual(scan('password = ${PASSWORD}\napi_key = <REDACTED>\nsecret_key = os.environ.get("SECRET")'), [])
 
@@ -36,7 +78,7 @@ class SanitizationTests(Fixture):
         self.assertBridge('SENSITIVE_LITERAL', Sanitizer(Policy.load(self.policy)).clean, 'customer-secret-name')
 
     def test_redaction_cannot_introduce_secret(self):
-        self.write_policy(extra='[[redactions]]\nliteral = "safe"\nreplacement = "password=nonplaceholder"\n')
+        self.write_policy(extra='[[redactions]]\nliteral = "safe"\nreplacement = "password=n0nplaceh0lder"\n')
         self.assertBridge('SECRET_DETECTED', Sanitizer(Policy.load(self.policy)).clean, 'safe')
 
     def test_goal_scanned(self):

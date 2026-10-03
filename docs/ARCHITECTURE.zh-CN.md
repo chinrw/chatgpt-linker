@@ -69,7 +69,7 @@ CRLF/CR 统一为 LF；显示路径可以脱敏，因此源行号是冻结文本
 
 `prepare --public-repo` 重做验证，冻结一份 `public_baseline` 文档及本地改动文件。默认选择 upstream remote；没有时用 origin。基线为 HEAD 与该远端缓存 ref 的共同祖先；`--base` 可显式指定公开祖先。不会 fetch，缓存陈旧可能多传已公开文件。无可用 ref、本地缺少 commit 或基线不属于 HEAD 的祖先时报错，不能猜测基线。
 
-增量相对固定基线计算，覆盖未推送提交和最终工作树；Git index 不作为独立版本传递。非忽略 untracked 文件参与选择。普通文件发送完整内容；删除以清单记录；重命名拆成删除/新增；可执行位写入 Git mode。policy 排除、敏感内容、二进制、超限文件、符号链接和 submodule 作为 `skipped` 写入证据缺口清单。冲突、sparse/skip-worktree、assume-unchanged 状态拒绝准备。公开模式不支持 `--auto` / `--glob`，仍可用 `--file` 增补明确文件。
+增量相对固定基线计算，覆盖未推送提交和最终工作树；Git index 不作为独立版本传递。非忽略 untracked 文件参与选择。普通文件发送完整内容；删除以清单记录；重命名拆成删除/新增；可执行位写入 Git mode。policy 排除、凭据或 `block_literals` 命中、二进制、超限文件、符号链接和 submodule 作为 `skipped` 写入证据缺口清单。已跟踪和未忽略的文件原样冻结，不做邮箱、内网 IP 或字面替换；被 Git 忽略的 `--file` 材料、draft 和 goal 仍做替换。冲突、sparse/skip-worktree、assume-unchanged 状态拒绝准备。公开模式不支持 `--auto` / `--glob`，仍可用 `--file` 增补明确文件。
 
 本地 provenance 另存 HEAD、基线和增量清单。捕获结束、publish 和 result 检查所选文件内容及 HEAD/增量清单漂移。公开 URL 的可用性和省略文件内容不在此检查内。基线链接固定 commit，但公开文件字节不在 bundle 中；这不是整仓快照。Git 只读命令禁用可选 index 写入、fsmonitor、外部 diff、textconv 和 clean/process filters，不运行项目代码。
 

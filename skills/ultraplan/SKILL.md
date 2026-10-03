@@ -38,16 +38,53 @@ report uncertainty and select relevant local evidence within the existing
 authorization. Do not silently replace a requested public overlay with `--auto`.
 
 For a verified public repository, send a commit-pinned reference plus current
-context, the plan, and local changes. Public project names and interfaces need
-no invented aliases. Honor configured redactions; local context and unpublished
-changes still need credential and sensitive-data checks.
+context, the plan, and local changes.
 
 When no policy exists, inspect file names, choose the relevant source/tests/docs
 scope, and create a policy outside the source tree using `policy-init` with that
 scope. Show the command and proceed under the invocation's authorization. Omit
 `--auto-publish` unless the user has already authorized standing approval.
 Keep an existing policy and global `sensitive.toml` unchanged. Ask only for a
-real scope expansion, unclear sensitive material, or new standing approval.
+real scope expansion, a credential finding you cannot classify, or new standing
+approval.
+
+## Sensitive material
+
+What needs protection depends on whether the material is already public or will
+become public when the user pushes. Classify each input before preparing it:
+
+- **Repository files in a verified public repository**, meaning tracked files and
+  nonignored untracked files in the overlay, are public now or will be after the
+  push. Do not alias project names, emails, hosts, or interfaces in them, and do
+  not replace them with excerpts. The CLI sends these files unmodified and only
+  blocks credentials and configured `block_literals`.
+- **The draft and goal** (conversation summary, decisions, effective rules) stay
+  private to this handoff. Keep credentials, local absolute paths, private
+  identities, and non-public business names out of them. The CLI still applies
+  email, private-IP, and configured literal redactions to this text.
+- **Private repositories and gitignored files** are not headed anywhere public.
+  Apply the draft rules to them and select only the files the review needs.
+
+The secret this workflow must never forward is an authentication credential: an
+API key, access token, password, private key, signed URL, or connection string
+with embedded credentials. Never read a `.env` file, credential store, or key
+file just to summarize or check it.
+
+When a public-mode file appears in `skipped` with `SECRET_DETECTED` or
+`SENSITIVE_LITERAL`, or an explicit `--file` fails with one of those codes and
+names the file, inspect the flagged file locally without echoing the value, then
+report one of two outcomes:
+
+- **Live credential or blocked literal.** This change would leak it on push.
+  Report it to the user as a blocker for the push, with path and category only,
+  and do not try to route around it. Continue the review with the file listed as
+  an evidence gap unless the user fixes the source first.
+- **Fixture, canary, or placeholder.** Report it as an evidence gap. When the
+  review needs the file's logic, describe it in the draft. Do not edit the
+  source to pass the scanner.
+
+The scanner is a pattern backstop, not proof that text is clean. A credential in
+an unfamiliar format can pass it, so keep looking at what you include.
 
 ## Collect effective task rules
 
@@ -69,7 +106,7 @@ rule's source and scope, for example `user-scope; authored prose` or
 visible rather than presenting the summary as complete.
 
 Send the effective constraints, not entire global rule files or unrelated host
-configuration. Omit secrets and private absolute paths. For identity-dependent
+configuration. Omit credentials and private absolute paths. For identity-dependent
 rules, describe the required template and use locally configured identity later;
 do not copy private signing identities into the bundle. These are task criteria
 for the review and any drafted README, comments, or commit messages. They do not
@@ -88,10 +125,11 @@ actions outside the user's request. The CLI cannot discover these rules itself.
    For private, unsupported, or unverified repositories, use relevant `--file`
    selections; `--auto` is available when the task needs the whole allowed tree.
    Keep credentials, customer dumps, and logs out of the evidence.
-2. Summarize current context, decisions, the effective task rules above, and the plan. Redact private
-   business-sensitive names. Do not forward the full conversation, local absolute paths, or tokens.
-   If a file itself contains a secret, stop; select a safe excerpt or
-   user-approved sanitized material. Do not alter the source to satisfy scanning.
+2. Summarize current context, decisions, the effective task rules above, and the
+   plan, following the draft rules under "Sensitive material". Do not forward the
+   full conversation. In private mode, if a needed file contains a credential,
+   select a safe excerpt or user-approved sanitized material instead. Do not
+   alter the source to satisfy scanning.
 3. Pipe the generated draft to stdin so that no project file is written:
 
    ```sh

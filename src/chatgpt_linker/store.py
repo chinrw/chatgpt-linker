@@ -14,7 +14,7 @@ from .fs import (atomic_write, canonical, digest, fsync_dir, private_dir, read_j
                  read_source, safe_read, task_lock, write_new)
 from .sanitize import (MAX_FILE_BYTES, MAX_FILES, Policy, Sanitizer, select_files,
                        assert_no_secrets, valid_text)
-from .git_evidence import baseline_document, public_baseline, select_delta, working_delta
+from .git_evidence import baseline_document, public_baseline, publishable_paths, select_delta, working_delta
 
 RID = re.compile(r"pr_[a-f0-9]{24}\Z")
 DID = re.compile(r"(?:request|d[0-9]{4})\Z")
@@ -282,6 +282,7 @@ class LocalStore:
             raise BridgeError("INVALID_PLAN", "Select an existing plan or provide a generated draft, not both.")
         skipped: list[dict] = []
         baseline, delta, overlay = None, None, None
+        public_paths: set[str] = set()
         if public_repo:
             if auto or globs:
                 raise BridgeError("INPUT_LIMIT", "Public mode selects local changes; use --file for additional evidence.")
@@ -290,6 +291,7 @@ class LocalStore:
             selected, included, skipped = select_delta(policy, delta)
             files = list(files) + selected
             overlay = baseline_document(baseline, included, skipped)
+            public_paths = publishable_paths(policy.project_root)
         elif remote is not None or base is not None:
             raise BridgeError("INPUT_LIMIT", "--remote and --base require --public-repo.")
         elif auto:
@@ -313,7 +315,7 @@ class LocalStore:
                               "text": draft, "sha256": digest(draft.encode())})
             total = len(draft.encode())
         if overlay is not None:
-            overlay = sanitizer.clean(valid_text(overlay.encode()))
+            overlay = sanitizer.check(valid_text(overlay.encode()))
             documents.append({"id": f"d{len(documents) + 1:04d}", "title": "Public baseline and local changes",
                               "kind": "public_baseline", "text": overlay, "sha256": digest(overlay.encode())})
             total += len(overlay.encode())
@@ -323,11 +325,13 @@ class LocalStore:
             policy.check_path(name)
             raw, signature = read_source(policy.project_root, name, MAX_FILE_BYTES)
             signatures[name] = signature
+            # Files a push can publish are only gated; ignored files keep the aliasing.
+            gate = sanitizer.check if name in public_paths else sanitizer.clean
             try:
-                text = sanitizer.clean(valid_text(raw))
+                text = gate(valid_text(raw))
             except BridgeError as exc:
                 raise BridgeError(exc.code, f"{exc.message} File: {name}") from exc  # path only, never content
-            title = sanitizer.clean(valid_text(name.encode()))
+            title = gate(valid_text(name.encode()))
             total += len(text.encode())
             if total > policy.max_bundle_bytes:
                 raise BridgeError("BUNDLE_LIMIT", f"Selected evidence exceeds the policy max_bundle_bytes ({policy.max_bundle_bytes}).")

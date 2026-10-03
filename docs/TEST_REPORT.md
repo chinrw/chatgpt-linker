@@ -2,6 +2,12 @@
 
 最新核实日期：2026-09-21。本文件记录不同环境下的独立核实，结论分别按环境标注；无法在本机复现的环境只作为记录保留。
 
+## 凭据扫描与公开模式脱敏（2026-10-03，Linux，CPython 3.14.7）
+
+124 项 unittest 通过，另通过 `compileall` 和 `git diff --check`。新增测试覆盖环境变量形式的凭据赋值、厂商 token 前缀、源码表达式和测试夹具不误报，以及公开模式下可推送文件原样冻结、draft 与被忽略文件仍脱敏、凭据和 `block_literals` 仍跳过文件。
+
+在一个约 830 个跟踪文件的本地 Rust/Python 仓库上对比了新旧扫描器，只记录文件名和类别。旧版命中 14 个文件，新版命中 12 个。旧版对 `api_key: &str` 参数和文档中示例值的误报已消失。新增的 `token`/`secret` 键名没有在 Rust 类型注解（`token: Option<…>`、`&CancelToken`）上产生误报。剩余命中都是测试夹具或此前就存在的 `url-credentials` 结果。尚未用真实 ChatGPT 会话验证新的 skill 指引。
+
 ## 有效规则交接（2026-09-21，Linux，CPython 3.14.7）
 
 120 项 unittest 通过。另用临时合成仓库验证普通材料和公开增量两种模式：`Effective task rules` 中的 README/文档、注释及 commit message 规则经过 prepare/publish/fetch 后保留，材料 hash 一致，单独选入的原计划未被修改，仓库外的合成全局规则文件没有进入 bundle。公开 API 使用模拟响应。

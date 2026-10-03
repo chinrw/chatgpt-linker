@@ -146,6 +146,12 @@ def working_delta(root: Path, base: str) -> dict:
             "entries": [entries[name] for name in sorted(entries)]}
 
 
+def publishable_paths(root: Path) -> set[str]:
+    """Tracked and nonignored untracked paths: the files a push can make public."""
+    listing = git(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
+    return {name for name in listing.split("\0") if name}
+
+
 def baseline_document(baseline: dict, entries: list[dict], skipped: list[dict]) -> str:
     return ("# Public repository baseline and local overlay\n\n"
             f"Repository: {baseline['repository_url']}\n"
@@ -175,7 +181,7 @@ def select_delta(policy: Policy, delta: dict) -> tuple[list[str], list[dict], li
                 raise BridgeError("UNSUPPORTED_GIT_ENTRY", "Linked files and submodules require separate evidence.")
             if entry["status"] != "D":
                 raw, _ = read_source(policy.project_root, name, MAX_FILE_BYTES)
-                sanitizer.clean(valid_text(raw))
+                sanitizer.check(valid_text(raw))
                 files.append(name)
             included.append(entry)
         except BridgeError as exc:

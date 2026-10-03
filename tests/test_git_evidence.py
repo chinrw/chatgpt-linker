@@ -89,7 +89,7 @@ class PublicEvidenceTests(Fixture):
         self.assertEqual(result['receipt']['model_attestation'], 'unverified')
 
     def test_public_mode_honors_policy_and_reports_omissions(self):
-        (self.repo / 'code.py').write_text('password="synthetic-sensitive-value"\n')
+        (self.repo / 'code.py').write_text('password="opaque-sensitive-value"\n')
         (self.repo / 'image.bin').write_bytes(b'\0\1')
         (self.repo / 'internal.py').write_text('internal = 1\n')
         self.write_policy(globs=['*'], extra='denied_globs = ["internal.py"]\n')
@@ -98,7 +98,28 @@ class PublicEvidenceTests(Fixture):
         self.assertEqual(reasons['code.py'], 'SECRET_DETECTED')
         self.assertEqual(reasons['image.bin'], 'NON_TEXT')
         self.assertEqual(reasons['internal.py'], 'EXCLUDED_FILE')
-        self.assertNotIn('synthetic-sensitive-value', json.dumps(self.documents(task)))
+        self.assertNotIn('opaque-sensitive-value', json.dumps(self.documents(task)))
+
+    def test_public_files_are_not_rewritten_but_draft_and_ignored_files_are(self):
+        line = 'Contact alice@example.com at 192.168.1.2 for InternalProduct\n'
+        (self.repo / 'code.py').write_text(line)
+        (self.repo / '.gitignore').write_text('notes.md\n')
+        (self.repo / 'notes.md').write_text(line)
+        self.write_policy(globs=['*'], extra='[[redactions]]\nliteral = "InternalProduct"\nreplacement = "<PROJECT>"\n')
+        task = self.store.prepare(self.policy, None, ['notes.md'], 'Review the current plan',
+                                  draft='Context from bob@example.com\n', public_repo=True)
+        docs = {d['title']: d['text'] for d in self.documents(task)}
+        self.assertEqual(docs['code.py'], line)
+        self.assertNotIn('alice@example.com', docs['notes.md'])
+        self.assertIn('<PROJECT>', docs['notes.md'])
+        self.assertNotIn('bob@example.com', docs['Agent draft plan'])
+
+    def test_public_files_still_block_credentials_and_literals(self):
+        (self.repo / 'code.py').write_text('OPENAI_API_KEY=' + '9f8e7d6c5b4a3928' * 2 + '\n')
+        (self.repo / 'other.py').write_text('codename = "customer-secret-name"\n')
+        self.write_policy(globs=['*'], extra='block_literals = ["customer-secret-name"]\n')
+        reasons = {item['path']: item['reason'] for item in self.task()['skipped']}
+        self.assertEqual(reasons, {'code.py': 'SECRET_DETECTED', 'other.py': 'SENSITIVE_LITERAL'})
 
     def test_new_changes_and_restored_deletions_invalidate_source(self):
         (self.repo / 'code.py').unlink()

@@ -55,6 +55,24 @@ Selection is more automatic:
   including README/docs, comment, and commit-message requirements. Existing
   plans remain separate evidence files; global rule files are not uploaded whole.
 
+Sensitive-data handling targets credentials:
+
+- In public mode, tracked and nonignored repository files are frozen verbatim.
+  Email, private-IP, and literal redactions no longer rewrite code that the push
+  will publish anyway. Credentials and `block_literals` still skip the file.
+  Draft, goal, and gitignored `--file` inputs keep the redactions.
+- The credential-assignment rule now matches environment-style names such as
+  `OPENAI_API_KEY`, `GITHUB_TOKEN`, and `DB_PASSWORD`, plus `token`, `secret`,
+  and `private_key` keys. New rules cover Bearer headers and Google, Stripe live,
+  GitLab, Hugging Face, npm, PyPI, Slack webhook, and Azure account keys. The
+  `openai-key` category is renamed `sk-api-key`.
+- Unquoted code expressions, letters-only variable names, generic and reference
+  types, and fixture-style values (`test-…`, `CANARY_…`, `sk-ant-...`) are no
+  longer reported as credential assignments.
+- The ultraplan skill classifies inputs as public repository files, private
+  draft text, or private files. A public-mode credential hit is reported as a
+  push blocker instead of being replaced with an excerpt.
+
 ## 0.1.0 — 2026-09-17
 
 Initial implementation: selected-file preparation and offline scanning; immutable

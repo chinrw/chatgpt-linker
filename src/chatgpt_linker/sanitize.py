@@ -35,32 +35,83 @@ AUTO_SKIP_PARTS = {".mypy_cache", ".pytest_cache", ".ruff_cache", ".tox", ".nox"
 AUTO_SKIP_NAMES = {"package-lock.json", "yarn.lock", "pnpm-lock.yaml", "uv.lock", "poetry.lock",
                    "cargo.lock", "gemfile.lock", "composer.lock", "go.sum"}
 
+# Lookarounds instead of \b: "_" is a word character, so \bapi_key\b never matched
+# environment-style names such as OPENAI_API_KEY or DB_PASSWORD.
+CREDENTIAL_NAME = (r"(?:api[_-]?(?:key|token|secret)|access[_-]?(?:key|token)|auth[_-]?token|refresh[_-]?token|"
+                   r"bearer[_-]?token|client[_-]?secret|secret[_-]?(?:access[_-]?)?key|private[_-]?key|"
+                   r"password|passwd|secret|token)")
+
 # The scanner reports only category names, never matched bytes.
 SECRET_RULES = (
     ("private-key", re.compile(r"-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----")),
-    ("openai-key", re.compile(r"\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{20,}")),
+    ("sk-api-key", re.compile(r"\bsk-(?:proj-|svcacct-|ant-)?[A-Za-z0-9_-]{20,}")),
     ("github-token", re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})")),
     ("aws-access-key", re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b")),
     ("slack-token", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{12,}")),
+    ("slack-webhook", re.compile(r"hooks\.slack\.com/services/T[A-Za-z0-9]+/B[A-Za-z0-9]+/[A-Za-z0-9]{16,}")),
+    ("google-api-key", re.compile(r"\bAIza[0-9A-Za-z_-]{35}")),
+    ("stripe-key", re.compile(r"\b(?:sk|rk)_live_[0-9A-Za-z]{16,}")),
+    ("gitlab-token", re.compile(r"\bglpat-[0-9A-Za-z_-]{20,}")),
+    ("huggingface-token", re.compile(r"\bhf_[A-Za-z0-9]{30,}")),
+    ("npm-token", re.compile(r"\bnpm_[A-Za-z0-9]{36}\b")),
+    ("pypi-token", re.compile(r"\bpypi-AgE[A-Za-z0-9_-]{50,}")),
+    ("azure-account-key", re.compile(r"\bAccountKey=[A-Za-z0-9+/]{20,}", re.I)),
+    # The digit lookahead keeps prose such as "Bearer token-based-authentication" out.
+    ("bearer-token", re.compile(r"\bBearer\s+(?=[A-Za-z._~+/-]*\d)[A-Za-z0-9._~+/-]{20,}", re.I)),
     ("jwt", re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}")),
     ("url-credentials", re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://[^\s/:@]{1,128}:[^\s/@]{1,256}@")),
     ("signed-url", re.compile(r"[?&](?:x-amz-signature|x-goog-signature|sig|access_token|api_key)=[^\s&#]+", re.I)),
     ("credential-assignment", re.compile(
-        r'''(?im)\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password|passwd|secret[_-]?key)\b["']?\s*[:=]\s*["']?([^\s"',;\x60]{4,})''')),
+        r'''(?im)(?<![A-Za-z0-9])''' + CREDENTIAL_NAME +
+        # Group 2 is a quoted value. Group 3 is an unquoted value, which also stops at
+        # code punctuation so calls, subscripts, and generic types can be recognized.
+        r'''(?![A-Za-z0-9])["']?\s*[:=]\s*(?:(["'])([^\s"',;\x60]{4,})|([^\s"',;\x60()\[\]{}<>&*]{4,}))''')),
 )
 EMAIL = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 PRIVATE_IP = re.compile(r"\b(?:10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2})\b")
 PLACEHOLDERS = {"none", "null", "true", "false", "changeme", "example", "placeholder", "redacted"}
+# A value containing one of these words as a separate token is a fixture, canary,
+# or template ("test-password", "CANARY_KEY", "your-api-key-here"), not a live credential.
+PLACEHOLDER_WORDS = {"canary", "changeme", "dummy", "example", "fake", "fixture", "leak", "mock", "placeholder",
+                     "redacted", "sample", "secret", "sentinel", "synthetic", "test", "your"}
+IDENTIFIER_CHAIN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+\Z")
+LETTERS_ONLY = re.compile(r"[A-Za-z_]+\Z")
+# Upper-case words joined by "_" or "-" name a constant. Generated credentials are not word
+# lists. Three letters per segment keeps recovery-code formats such as AB12-CD34 flagged.
+WORD_CONSTANT = re.compile(r"[A-Z]{3,}[0-9]*(?:[_-][A-Z]{3,}[0-9]*)+\Z")
+
+
+def _is_reference(match: re.Match, text: str) -> bool:
+    """True when an assignment's value is a placeholder or code, not a literal secret."""
+    quoted, value = match.group(1), match.group(2) or match.group(3)
+    lower = value.lower()
+    if (lower in PLACEHOLDERS or value.startswith(("<", "$", "%", "os.environ", "process.env")) or
+            PLACEHOLDER_WORDS & set(re.split(r"[^a-z0-9]+", lower)) or len(set(lower)) <= 2 or
+            "..." in value or "0123456789" in value or WORD_CONSTANT.match(value)):
+        return True
+    if quoted:
+        return False
+    # Unquoted values in source code are usually expressions: calls, subscripts,
+    # generic types, attribute chains, or variable names.
+    if text[match.end():match.end() + 1] in ("(", "[", "<") or IDENTIFIER_CHAIN.match(value):
+        return True
+    if not LETTERS_ONLY.match(value):
+        return False
+    # A letters-only value is a variable in code ("let token = match", "bot_token: String,")
+    # but a passphrase on a config line, where the key starts the line and the value ends it.
+    line_start = text.rfind("\n", 0, match.start()) + 1
+    line_end = text.find("\n", match.end())
+    prefix = text[line_start:match.start()].strip()
+    rest = text[match.end():len(text) if line_end < 0 else line_end].strip()
+    return not (prefix in ("", "-", "export") and (not rest or rest.startswith("#")))
 
 
 def scan(text: str) -> list[str]:
     hits = set()
     for label, rule in SECRET_RULES:
         for match in rule.finditer(text):
-            if label == "credential-assignment":
-                value = match.group(1)
-                if (value.lower() in PLACEHOLDERS or value.startswith(("<", "[", "${", "$", "os.environ", "process.env"))):
-                    continue
+            if label == "credential-assignment" and _is_reference(match, text):
+                continue
             hits.add(label)
     return sorted(hits)
 
@@ -213,10 +264,19 @@ class Sanitizer:
             self.mapping[value] = f"[{category}_{len(self.mapping) + 1:03d}]"
         return self.mapping[value]
 
-    def clean(self, text: str) -> str:
-        assert_no_secrets(text)  # A configured rewrite cannot hide a credential hit.
+    def check(self, text: str) -> str:
+        """Gate text that is public or headed to a public repository, without rewriting it.
+
+        Aliasing such text would show the reviewer different bytes from the ones that
+        get pushed, while credentials and block_literals would still leak on push.
+        """
+        assert_no_secrets(text)
         if any(s in text for s in self.policy.block_literals):
             raise BridgeError("SENSITIVE_LITERAL", "Publication blocked by a configured sensitive literal.")
+        return valid_text(text.encode("utf-8"))
+
+    def clean(self, text: str) -> str:
+        self.check(text)  # A configured rewrite cannot hide a credential hit.
         for old, new in self.policy.replacements:
             text = text.replace(old, new)
         if self.policy.redact_emails:
