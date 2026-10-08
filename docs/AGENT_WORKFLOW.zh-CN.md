@@ -89,7 +89,9 @@ tool_timeout_sec = 330
 
 `prepare` 返回 task ID；`publish` 把它变成 `waiting_for_chatgpt`。这仅表示材料可读。用户还没有发送 ChatGPT 提示时，不能说 Pro 已经在复审。
 
-`submit_review` 成功后，完整 Markdown 和回执一起原子发布。`review_wait` 单次最多 300 秒，结果一出现立即返回；skill 默认从交接起持续轮询 90 分钟（在调用时写明「最多等 N 小时」可覆盖），中途不向用户确认。`completed` 表示复核交接完成，agent 随即核验报告并恢复原任务；`cancelled`、`expired` 或预算用尽时报告阻塞和 request ID。CLI `wait` 只等待本地结果，不执行项目代码；收到结果后的实现由 host agent 按原始授权推进。
+材料发布后，agent 展示完整可复制的提示词，再用 host 当前允许的 question 工具询问是否已经在 ChatGPT Pro 发送，提供「已发送，等待复审」和「稍后发送，保留任务」两个选项。异步问题必须收到实际回复才算确认。没有可用的 question 工具时，agent 以提示词和回复要求结束交接，等用户回复后接续同一个 request ID。选择稍后发送不会取消任务。
+
+`submit_review` 成功后，完整 Markdown 和回执一起原子发布。`review_wait` 单次最多 300 秒，结果一出现立即返回；skill 默认从用户确认发送或明确要求等待时起持续轮询 90 分钟（在调用时写明「最多等 N 小时」可覆盖），开始等待后不重复向用户确认。`completed` 表示复核交接完成，agent 随即核验报告并恢复原任务；`cancelled`、`expired` 或预算用尽时报告阻塞和 request ID。CLI `wait` 只等待本地结果，不执行项目代码；收到结果后的实现由 host agent 按原始授权推进。
 
 ```sh
 chatgpt-linker --state "$STATE" wait "$RID" --timeout 5400

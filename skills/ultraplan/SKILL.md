@@ -169,8 +169,22 @@ actions outside the user's request. The CLI cannot discover these rules itself.
 ## Hand off to ChatGPT
 
 Run `chatgpt-linker --state "$STATE" prompt <id>` and present its exact generated
-prompt to the user. The user selects the intended Pro model and this custom MCP
-in ChatGPT, then sends the prompt. Tell the user clearly that this step is needed.
+prompt in a copyable code block. The user selects the intended Pro model and
+this custom MCP in ChatGPT, then sends the prompt.
+
+After displaying the prompt, use the host's question tool, when available and
+permitted in the current mode, to ask whether the user has sent it in ChatGPT Pro.
+Offer "Sent; wait for the review" and "Later; keep the request". For example,
+use `request_user_input_async`, `AskUserQuestion`, or `question` if exposed by the
+host. Include the request ID and refer to the displayed prompt. This question
+confirms the manual handoff, not publication permission already granted.
+
+Start polling only after the user confirms sending or explicitly asks to wait.
+For an asynchronous question, keep it pending until the reply arrives. A default
+selection, no answer, or elapsed time is not confirmation. If the user chooses
+later, retain the request ID and finish with the prompt and resume instructions.
+If no permitted question tool is available, make the handoff the final response
+and ask the user to reply after sending. Resume that same request on their reply.
 Do NOT claim the task has started thinking merely because the bundle is published.
 Do not access browser cookies, scrape a conversation, automate the web UI, create
 private model requests, or switch to a paid model API.
@@ -181,9 +195,10 @@ not mislabel it as read-only or try to return the answer through search argument
 
 ## Receive or resume
 
-After presenting the prompt, start waiting immediately and keep waiting without
-asking the user whether to continue. Default budget: 90 minutes total from the
-hand-off, in bounded calls; a Pro reasoning pass alone can take close to an hour.
+After the user confirms sending or explicitly asks to wait, start waiting and
+keep waiting without asking again whether to continue. Default budget: 90 minutes
+total from that reply, in bounded calls; a Pro reasoning pass alone can take close
+to an hour.
 Use a different budget only when the user names one in the invocation (for
 example "wait up to 3 hours"). Every call must finish inside the host's own
 tool timeout, so wait in bounded slices and loop. If the host exposes the local
