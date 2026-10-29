@@ -47,6 +47,7 @@
             nativeCheckInputs = [
               pkgs.python3Packages.unittestCheckHook
               pkgs.git
+              pkgs.openssl
             ];
             unittestFlagsArray = [
               "-s"
@@ -97,6 +98,7 @@
           packages = [
             pkgs.python3
             pkgs.uv
+            pkgs.openssl
           ];
         };
       });

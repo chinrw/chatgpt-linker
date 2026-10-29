@@ -2,7 +2,7 @@
 
 ## 实现范围
 
-这是一个单用户、私有连接的 Python 程序。无需模型 API，也没有常驻模型调度器。进程分为本地 CLI、远程证据 MCP，以及可选本地控制 MCP；复用同一存储层。
+这是一个供同一用户的可信机器使用的 Python 程序，无需模型 API，也没有常驻模型调度器。源机器上的 CLI 准备材料，ChatGPT 通过证据 MCP 读取材料并提交结果。可选的 LAN 交换入口让它们位于不同机器；本地控制 MCP 供源机器上的 agent 查询和领取结果。各入口复用同一存储层。
 
 flake 导出 `homeManagerModules.default`（同 `homeManagerModules.chatgpt-linker`）。模块位于 `nix/home-manager.nix`，通过 `programs.chatgpt-linker.enable` 安装 CLI，并按 `skillTargets` 声明共享 agent / Claude 的 skill 链接。默认两处都启用；空列表只安装 CLI。`skillDirectories.agents` / `.claude` 分别控制父目录，模块追加 `/ultraplan`；未覆盖的目录保留默认值。目标路径遵循 HM 的 HOME 内文件管理规则。使用方移除旧 skill 激活注册后，链接随 HM generation 更新。
 
@@ -16,6 +16,7 @@ src/chatgpt_linker/
   store.py         冻结包、授权、引用、固定结果、状态与来源漂移
   protocol.py      有限 MCP/JSON-RPC，stdio 与工具路由
   http_server.py   loopback-only 调试用无状态 Streamable HTTP
+  exchange_http.py  源机器上传任务、查询、领取、取消和手工导入的 HTTPS 入口
   cli.py           用户和本地 agent 的控制入口
 ```
 
@@ -26,6 +27,8 @@ state/                            0700；不在被审查项目中
   private/<request_id>/           不提供给远程 MCP
     candidate.json               已扫描的候选包，不是原始秘密副本
     provenance.json              本地项目路径、策略 hash、所选原始文件 hash
+    remote.json                  远端任务的固定节点和本机凭据文件路径（可选）
+    result/                      远端结果下载后的 Markdown 和原始回执（可选）
   exchange/
     inbox/<request_id>/
       bundle.json                不可变脱敏文本及确定性 hash
@@ -107,6 +110,24 @@ chatgpt-linker serve --exchange "$HOME/.local/state/chatgpt-linker/exchange" \
 ```
 
 本地客户端必须提供 `Authorization: Bearer <本地 token>`、JSON Content-Type，以及同时接受 application/json 与 text/event-stream。token 不放 URL 或日志。正式 ChatGPT 接入优先使用官方 Tunnel 的 stdio。
+
+## 源机器到交换节点
+
+`serve-exchange` 与 ChatGPT 的 `serve` 使用不同的监听进程和接口，共用同一个 `Exchange`。源机器通过独立 bearer 令牌调用以下接口；它们不出现在 ChatGPT 的 MCP 工具清单中：
+
+| 方法和路径 | 行为 |
+|---|---|
+| `POST /v1/tasks` | 接收 `bundle`、`ttl_hours`、`allow_submit`，校验结构、哈希、大小和凭据模式后原子发布 |
+| `GET /v1/tasks/<id>` | 返回任务状态、bundle hash、到期时间和已有回执 |
+| `GET /v1/tasks/<id>/result` | 返回完成结果的 Markdown 和回执 |
+| `POST /v1/tasks/<id>/cancel` | 接收空对象，撤销任务 |
+| `POST /v1/tasks/<id>/import` | 接收 `bundle_sha256` 和 `markdown`，以 `manual_import` 来源提交固定结果 |
+
+上传前仍由源机器检查 policy、发布授权和源码漂移。节点不接受源路径或 policy；共享令牌授予可信源机器发布权限。上传请求最多 48 MiB，文本总量仍受 32 MB 硬上限约束。服务限制为四个并发连接，拒绝重复 JSON key、非有限数、额外字段和客户端指定的存储路径。
+
+源机器在首次上传前记录节点，未知提交结果也不会换节点。重复上传相同包保留原始到期时间和撤销状态，不能改变提交权限。下载时核验 request ID、bundle hash、结果 hash 和长度，再把 Markdown 与原始回执原子保存到本地私有任务目录。源码漂移由源机器检查，节点不需要访问源仓库。
+
+配置步骤见 [LAN 交换节点与源机器配置](LAN_EXCHANGE.zh-CN.md)。
 
 ## 不存在的能力
 

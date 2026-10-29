@@ -32,6 +32,12 @@ def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Review plans through ChatGPT's user-initiated MCP connection.")
     p.add_argument("--version", action="version", version=__version__)
     p.add_argument("--state", type=Path, default=default_state(), help="Private state directory, outside the source repo")
+    p.add_argument("--exchange-url", default=os.environ.get("CHATGPT_LINKER_EXCHANGE_URL"),
+                   help="HTTPS exchange node for new publications; existing tasks retain their node")
+    p.add_argument("--exchange-token-file", default=os.environ.get("CHATGPT_LINKER_EXCHANGE_TOKEN_FILE"),
+                   help="Private exchange bearer-token file, separate from the tunnel credential")
+    p.add_argument("--exchange-ca-file", default=os.environ.get("CHATGPT_LINKER_EXCHANGE_CA_FILE"),
+                   help="CA certificate for an exchange using a private certificate authority")
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("init", help="Create private task storage")
     info = sub.add_parser("repo-info", help="Verify an anonymous public GitHub baseline without uploading source")
@@ -64,7 +70,7 @@ def parser() -> argparse.ArgumentParser:
     for name in ("status", "prompt", "result", "check", "cancel"):
         s = sub.add_parser(name)
         s.add_argument("request_id")
-    wait = sub.add_parser("wait", help="Wait only on local storage; exit 3 on timeout")
+    wait = sub.add_parser("wait", help="Wait on the task exchange, never ChatGPT; exit 3 on timeout")
     wait.add_argument("request_id")
     # 90 min: one ChatGPT Pro reasoning pass can run close to an hour.
     wait.add_argument("--timeout", type=float, default=5400)
@@ -81,7 +87,15 @@ def parser() -> argparse.ArgumentParser:
     serve.add_argument("--port", type=int, default=8766)
     serve.add_argument("--token-file", type=Path, help="Required for local HTTP; private file containing a local bearer token")
     sub.add_parser("serve-control", help="LOCAL agent stdio MCP: review_status, review_result, review_wait")
-    token = sub.add_parser("http-token", help="Create a private LOCAL HTTP token, never a model API key")
+    node = sub.add_parser("serve-exchange", help="Authenticated task upload and result retrieval for your machines")
+    node.add_argument("--exchange", type=Path, required=True, help="The same exchange directory used by the tunnel MCP")
+    node.add_argument("--listen", default="127.0.0.1", help="IPv4 bind address; non-loopback requires TLS")
+    node.add_argument("--port", type=int, default=8767)
+    node.add_argument("--token-file", type=Path, required=True)
+    node.add_argument("--allow-host", action="append", default=[], help="Exact HTTP Host (including port); repeat for proxy names")
+    node.add_argument("--tls-cert", type=Path, help="PEM certificate chain for a direct HTTPS listener")
+    node.add_argument("--tls-key", type=Path, help="Private PEM key for the HTTPS listener")
+    token = sub.add_parser("http-token", help="Create a private HTTP bearer token, never a model API key")
     token.add_argument("--output", type=Path, required=True)
     sub.add_parser("doctor", help="Report environment and state; does not contact ChatGPT")
     return p
@@ -122,7 +136,30 @@ def run(args: argparse.Namespace) -> int:
             write_new(output, (secrets.token_urlsafe(48) + "\n").encode())
         except FileExistsError as exc:
             raise BridgeError("TOKEN_EXISTS", "Refusing to overwrite an existing token file.") from exc
-        emit({"token_file": str(output), "purpose": "local HTTP transport only; value not printed"})
+        emit({"token_file": str(output), "purpose": "HTTP transport authentication; value not printed"})
+        return 0
+    if args.command == "serve-exchange":
+        import ipaddress
+        import ssl
+        from .exchange_http import ExchangeHTTPServer, read_token
+        ipaddress.IPv4Address(args.listen)
+        if not 1 <= args.port <= 65535 or bool(args.tls_cert) != bool(args.tls_key):
+            raise BridgeError("HTTP_CONFIG", "Use a valid port and provide both TLS certificate and key.")
+        if args.listen == "0.0.0.0" and not args.allow_host:
+            raise BridgeError("HTTP_CONFIG", "A wildcard listener requires explicit --allow-host addresses.")
+        for secret in (args.token_file, args.tls_key):
+            if secret and secret.expanduser().resolve().is_relative_to(args.exchange.expanduser().resolve()):
+                raise BridgeError("HTTP_CONFIG", "Keep transport credentials outside the exchange directory.")
+        context = None
+        if args.tls_cert:
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.load_cert_chain(args.tls_cert.expanduser(), args.tls_key.expanduser())
+        server = ExchangeHTTPServer((args.listen, args.port), Exchange(args.exchange), read_token(args.token_file),
+                                    allowed_hosts=args.allow_host, tls_context=context)
+        try:
+            server.serve_forever()
+        finally:
+            server.server_close()
         return 0
     if args.command == "serve":
         exchange = Exchange(args.exchange, args.request)
@@ -151,7 +188,13 @@ def run(args: argparse.Namespace) -> int:
         policy = Policy.load(args.policy)
         if args.state.expanduser().resolve().is_relative_to(policy.project_root):
             raise BridgeError("STATE_IN_PROJECT", "Keep bridge state outside the source project.")
-    store = LocalStore(args.state, create=args.command in ("init", "prepare"))
+    remote = None
+    if args.exchange_url or args.exchange_token_file or args.exchange_ca_file:
+        from .exchange_http import RemoteExchange
+        if not args.exchange_url or not args.exchange_token_file:
+            raise BridgeError("HTTP_CONFIG", "Configure both the exchange URL and token-file path.")
+        remote = RemoteExchange(args.exchange_url, args.exchange_token_file, args.exchange_ca_file)
+    store = LocalStore(args.state, create=args.command in ("init", "prepare"), remote=remote)
     if args.command == "init":
         emit({"state": str(store.root), "exchange": str(store.exchange.root)})
     elif args.command == "prepare":
@@ -210,7 +253,7 @@ def run(args: argparse.Namespace) -> int:
             markdown = raw.decode("utf-8")
         except UnicodeError as exc:
             raise BridgeError("INVALID_SUBMISSION", "Manual result must be UTF-8 Markdown.") from exc
-        emit(store.exchange.submit(args.request_id, args.bundle_sha256, markdown, source="manual_import"))
+        emit(store.import_result(args.request_id, args.bundle_sha256, markdown))
     elif args.command == "serve-control":
         serve_stdio(MCPApplication(local=store))
     elif args.command == "doctor":

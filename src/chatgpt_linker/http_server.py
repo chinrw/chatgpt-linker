@@ -1,4 +1,4 @@
-"""Loopback-only stateless Streamable HTTP, for a local trusted client.
+"""Bounded HTTP workers and loopback-only MCP for a local trusted client.
 
 Authentication is a local bearer token. This is NOT a public OAuth server.
 For ChatGPT, prefer the official tunnel's stdio transport instead.
@@ -13,17 +13,17 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from .protocol import MAX_MESSAGE, VERSIONS, MCPApplication, RpcError, encode, loads, rpc_error
 
 
-class LocalHTTPServer(ThreadingHTTPServer):
+class BoundedHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
     request_queue_size = 16
     allow_reuse_address = True
 
-    def __init__(self, port: int, app: MCPApplication, token: str):
+    def __init__(self, address, handler, token: str):
         if not 32 <= len(token) <= 256 or not token.isascii() or any(c.isspace() for c in token):
             raise ValueError("HTTP token must be at least 32 characters")
-        self.app, self.token = app, token
+        self.token = token
         self.slots = threading.BoundedSemaphore(32)
-        super().__init__(("127.0.0.1", port), Handler)
+        super().__init__(address, handler)
 
 
     def process_request(self, request, client_address):
@@ -45,6 +45,12 @@ class LocalHTTPServer(ThreadingHTTPServer):
     def handle_error(self, request, client_address):
         # Never print a traceback containing transport secrets or tool inputs.
         pass
+
+
+class LocalHTTPServer(BoundedHTTPServer):
+    def __init__(self, port: int, app: MCPApplication, token: str):
+        self.app = app
+        super().__init__(("127.0.0.1", port), Handler, token)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -84,6 +90,9 @@ class Handler(BaseHTTPRequestHandler):
         if len(self.headers.get_all("Origin", [])) > 1 or (origin is not None and origin not in {"http://" + h for h in hosts}):
             self.reply(403, {"error": "origin_rejected"})
             return False
+        return self.bearer_authorized()
+
+    def bearer_authorized(self) -> bool:
         authorization = self.headers.get("Authorization", "")
         if (len(self.headers.get_all("Authorization", [])) != 1 or not authorization.isascii() or
                 not hmac.compare_digest(authorization, "Bearer " + self.server.token)):

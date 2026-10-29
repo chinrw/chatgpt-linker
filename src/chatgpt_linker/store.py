@@ -12,7 +12,7 @@ from pathlib import Path
 from .errors import BridgeError
 from .fs import (atomic_write, canonical, digest, fsync_dir, private_dir, read_json,
                  read_source, safe_read, task_lock, write_new)
-from .sanitize import (MAX_FILE_BYTES, MAX_FILES, Policy, Sanitizer, select_files,
+from .sanitize import (MAX_BUNDLE_BYTES, MAX_FILE_BYTES, MAX_FILES, Policy, Sanitizer, select_files,
                        assert_no_secrets, valid_text)
 from .git_evidence import baseline_document, public_baseline, publishable_paths, select_delta, working_delta
 
@@ -47,12 +47,21 @@ def uri(rid: str, doc: str) -> str:
 
 
 def _checked_bundle(path: Path, expected: str | None = None) -> dict:
-    wrapper = read_json(path)
+    return checked_bundle(read_json(path), expected)
+
+
+def checked_bundle(wrapper: dict, expected: str | None = None) -> dict:
     try:
+        if not isinstance(wrapper, dict) or set(wrapper) != {"payload", "bundle_sha256"}:
+            raise ValueError()
         payload, sha = wrapper["payload"], wrapper["bundle_sha256"]
         if not isinstance(payload, dict) or not SHA.fullmatch(sha):
             raise ValueError()
         if digest(canonical(payload)) != sha or (expected and expected != sha):
+            raise ValueError()
+        if (set(payload) != {"schema_version", "request_id", "goal", "documents"} or
+                type(payload["schema_version"]) is not int or payload["schema_version"] != 1 or
+                not isinstance(payload["goal"], str)):
             raise ValueError()
         valid_rid(payload["request_id"])
         docs = payload["documents"]
@@ -60,14 +69,36 @@ def _checked_bundle(path: Path, expected: str | None = None) -> dict:
             raise ValueError()
         if len({d["id"] for d in docs}) != len(docs):
             raise ValueError()
+        total = 0
         for d in docs:
+            if (set(d) != {"id", "title", "kind", "text", "sha256"} or
+                    d["kind"] not in ("original_plan", "evidence", "public_baseline")):
+                raise ValueError()
             if (not re.fullmatch(r"d[0-9]{4}", d["id"]) or
                     not isinstance(d["text"], str) or not isinstance(d["title"], str) or
                     digest(d["text"].encode()) != d["sha256"]):
                 raise ValueError()
+            raw = d["text"].encode()
+            total += len(raw)
+        if total > MAX_BUNDLE_BYTES:
+            raise ValueError()
         return wrapper
     except (KeyError, ValueError, TypeError) as exc:
         raise BridgeError("INTEGRITY_ERROR", "Evidence bundle integrity check failed.") from exc
+
+
+def save_result(outgoing: Path, data: bytes, receipt: dict) -> None:
+    temp = private_dir(outgoing / (".pending-" + secrets.token_hex(16)))
+    try:
+        write_new(temp / "review.md", data)
+        write_new(temp / "receipt.json", canonical(receipt))
+        fsync_dir(temp)
+        # Both files become visible together. A crash cannot expose half a result.
+        os.rename(temp, outgoing / "result")
+        fsync_dir(outgoing)
+    finally:
+        if temp.exists():
+            shutil.rmtree(temp)
 
 
 class Exchange:
@@ -227,18 +258,46 @@ class Exchange:
             receipt = {"schema_version": 1, "status": "completed", "request_id": rid,
                        "bundle_sha256": bundle_sha256, "result_sha256": digest(data), "bytes": len(data),
                        "submitted_at": time.time(), "source": source, "model_attestation": "unverified"}
-            temp = private_dir(outgoing / (".pending-" + secrets.token_hex(16)))
+            save_result(outgoing, data, receipt)
+            return receipt
+
+    def publish(self, wrapper: dict, ttl_hours: int, *, allow_submit: bool = True) -> dict:
+        wrapper = checked_bundle(wrapper)
+        if type(ttl_hours) is not int or not 1 <= ttl_hours <= 168 or type(allow_submit) is not bool:
+            raise BridgeError("INVALID_PUBLICATION", "Use a TTL of 1-168 hours and a boolean submission grant.")
+        assert_no_secrets(canonical(wrapper).decode())
+        assert_no_secrets(wrapper["payload"]["goal"])
+        for document in wrapper["payload"]["documents"]:
+            assert_no_secrets(document["title"])
+            assert_no_secrets(document["text"])
+        rid = wrapper["payload"]["request_id"]
+        if self.request_scope and self.request_scope != rid:
+            raise BridgeError("UNAVAILABLE", "Request is not available on this connection.")
+        outgoing = private_dir(self.outbox / rid)
+        with task_lock(outgoing):
+            incoming = self.inbox / rid
+            if incoming.exists() or incoming.is_symlink():
+                result = self.status(rid)
+                if result["bundle_sha256"] != wrapper["bundle_sha256"]:
+                    raise BridgeError("BUNDLE_MISMATCH", "Published evidence cannot be replaced.")
+                previous = read_json(incoming / "grant.json")
+                if previous["allow_submit"] != allow_submit:
+                    raise BridgeError("GRANT_MISMATCH", "A published task's submission grant cannot change.")
+                return result
+            grant = {"request_id": rid, "bundle_sha256": wrapper["bundle_sha256"], "revoked": False,
+                     "allow_submit": allow_submit, "published_at": time.time(),
+                     "expires_at": time.time() + ttl_hours * 3600}
+            temp = private_dir(self.inbox / (".pending-" + secrets.token_hex(16)))
             try:
-                write_new(temp / "review.md", data)
-                write_new(temp / "receipt.json", canonical(receipt))
+                write_new(temp / "bundle.json", canonical(wrapper))
+                write_new(temp / "grant.json", canonical(grant))
                 fsync_dir(temp)
-                # Both files become visible together. A crash cannot expose half a result.
-                os.rename(temp, outgoing / "result")
-                fsync_dir(outgoing)
+                os.rename(temp, incoming)
+                fsync_dir(self.inbox)
             finally:
                 if temp.exists():
                     shutil.rmtree(temp)
-            return receipt
+        return self.status(rid)
 
     def status(self, rid: str) -> dict:
         incoming, outgoing = self._paths(rid)
@@ -258,19 +317,58 @@ class Exchange:
         return {"request_id": rid, "status": state, "bundle_sha256": bundle["bundle_sha256"],
                 "expires_at": grant["expires_at"], "receipt": receipt}
 
+    def cancel(self, rid: str) -> dict:
+        incoming, outgoing = self._paths(rid)
+        with task_lock(outgoing):
+            grant = read_json(incoming / "grant.json")
+            grant["revoked"] = True
+            atomic_write(incoming / "grant.json", canonical(grant))
+        return self.status(rid)
+
+    def result(self, rid: str) -> dict:
+        _, outgoing = self._paths(rid)
+        with task_lock(outgoing):
+            status = self.status(rid)
+            if status["status"] != "completed":
+                raise BridgeError("NOT_COMPLETED", "No completed result is available for this task.")
+            return {**status, "markdown": safe_read(outgoing / "result" / "review.md", MAX_RESULT_BYTES).decode()}
+
 
 class LocalStore:
     """Local CLI control plane. Never exposed to the remote review model."""
-    def __init__(self, root: Path, *, create: bool = False):
+    def __init__(self, root: Path, *, create: bool = False, remote=None):
         self.root = private_dir(root.expanduser().absolute(), create=create)
         self.private = private_dir(self.root / "private", create=create)
         shared = private_dir(self.root / "exchange", create=create)
         private_dir(shared / "inbox", create=create)
         private_dir(shared / "outbox", create=create)
         self.exchange = Exchange(shared)
+        self.remote = remote
 
     def _private_job(self, rid: str) -> Path:
         return private_dir(self.private / valid_rid(rid), create=False)
+
+    def _remote(self, rid: str):
+        job = self.private / valid_rid(rid)
+        if not job.exists() and not job.is_symlink():
+            return None
+        private_dir(job, create=False)
+        path = job / "remote.json"
+        if not path.exists() and not path.is_symlink():
+            return None
+        from .exchange_http import RemoteExchange
+        remote = RemoteExchange(**read_json(path))
+        if self.remote:
+            if self.remote.url != remote.url:
+                raise BridgeError("TARGET_MISMATCH", "This task is pinned to another exchange node.")
+            return self.remote
+        return remote
+
+    def _check_remote_status(self, rid: str, status: dict) -> None:
+        wrapper = _checked_bundle(self._private_job(rid) / "candidate.json")
+        if (status.get("request_id") != rid or status.get("bundle_sha256") != wrapper["bundle_sha256"] or
+                status.get("status") not in ("waiting_for_chatgpt", "completed", "cancelled", "expired")):
+            raise BridgeError("INTEGRITY_ERROR", "Exchange response does not match the local task.")
 
     def prepare(self, policy_path: Path, plan: str | None, files: list[str], goal: str, *,
                 draft: str | None = None, auto: bool = False, globs: list[str] | None = None,
@@ -404,31 +502,25 @@ class LocalStore:
             raise BridgeError("SOURCE_CHANGED", "Selected source changed; prepare a new request.")
         wrapper = _checked_bundle(job / "candidate.json")
         assert_no_secrets(canonical(wrapper).decode())
-        outgoing = private_dir(self.exchange.outbox / rid)
-        with task_lock(outgoing):
-            incoming = self.exchange.inbox / rid
-            if incoming.exists() or incoming.is_symlink():
-                result = self.exchange.status(rid)
-                if result["bundle_sha256"] != wrapper["bundle_sha256"]:
-                    raise BridgeError("BUNDLE_MISMATCH", "Published evidence cannot be replaced.")
+        with task_lock(job):
+            target = self._remote(rid) or self.remote
+            if target:
+                if (self.exchange.inbox / rid).exists():
+                    raise BridgeError("TARGET_MISMATCH", "This task was published locally; create a new task for another node.")
+                # Pin before sending: a lost response must never redirect a retry to another node.
+                atomic_write(job / "remote.json", canonical(target.config()))
+                result = target.publish(wrapper, policy.ttl_hours, allow_submit=allow_submit)
+                self._check_remote_status(rid, result)
                 return result
-            grant = {"request_id": rid, "bundle_sha256": wrapper["bundle_sha256"], "revoked": False,
-                     "allow_submit": allow_submit, "published_at": time.time(),
-                     "expires_at": time.time() + policy.ttl_hours * 3600}
-            temp = private_dir(self.exchange.inbox / (".pending-" + secrets.token_hex(16)))
-            try:
-                write_new(temp / "bundle.json", canonical(wrapper))
-                write_new(temp / "grant.json", canonical(grant))
-                fsync_dir(temp)
-                os.rename(temp, incoming)
-                fsync_dir(self.exchange.inbox)
-            finally:
-                if temp.exists():
-                    shutil.rmtree(temp)
-        return self.exchange.status(rid)
+            return self.exchange.publish(wrapper, policy.ttl_hours, allow_submit=allow_submit)
 
     def status(self, rid: str) -> dict:
         self._private_job(rid)
+        remote = self._remote(rid)
+        if remote:
+            result = remote.status(rid)
+            self._check_remote_status(rid, result)
+            return result
         incoming = self.exchange.inbox / rid
         if incoming.exists() or incoming.is_symlink():
             return self.exchange.status(rid)
@@ -437,20 +529,57 @@ class LocalStore:
 
     def cancel(self, rid: str) -> dict:
         self._private_job(rid)
-        incoming, outgoing = self.exchange._paths(rid)
-        with task_lock(outgoing):
-            grant = read_json(incoming / "grant.json")
-            grant["revoked"] = True
-            atomic_write(incoming / "grant.json", canonical(grant))
-        return self.exchange.status(rid)
+        remote = self._remote(rid)
+        if remote:
+            result = remote.cancel(rid)
+            self._check_remote_status(rid, result)
+            return result
+        return self.exchange.cancel(rid)
 
     def result(self, rid: str) -> dict:
+        remote = self._remote(rid)
+        if remote:
+            result = remote.result(rid)
+            self._check_remote_status(rid, result)
+            markdown = result.get("markdown")
+            if not isinstance(markdown, str):
+                raise BridgeError("INTEGRITY_ERROR", "The exchange did not return a Markdown result.")
+            try:
+                data = markdown.encode()
+            except UnicodeError as exc:
+                raise BridgeError("INTEGRITY_ERROR", "The exchange returned invalid result text.") from exc
+            receipt = result["receipt"]
+            if (result["status"] != "completed" or not 100 <= len(data) <= MAX_RESULT_BYTES or
+                    not isinstance(receipt, dict) or receipt.get("request_id") != rid or
+                    receipt.get("bundle_sha256") != result["bundle_sha256"] or
+                    receipt.get("status") != "completed" or receipt.get("result_sha256") != digest(data) or
+                    receipt.get("bytes") != len(data)):
+                raise BridgeError("INTEGRITY_ERROR", "Downloaded result does not match its receipt.")
+            job = self._private_job(rid)
+            with task_lock(job):
+                previous = self.exchange._receipt(job, rid, result["bundle_sha256"])
+                if previous:
+                    if previous != receipt:
+                        raise BridgeError("RESULT_CONFLICT", "The exchange returned a different result receipt.")
+                else:
+                    save_result(job, data, receipt)
+            return {"request_id": rid, "status": "completed", "artifact_path": str(job / "result" / "review.md"),
+                    "receipt": receipt, "source_check": self.check_source(rid)}
         status = self.status(rid)
         if status["status"] != "completed":
             raise BridgeError("NOT_COMPLETED", "No completed result is available for this task.")
         artifact = self.exchange.outbox / rid / "result" / "review.md"
         return {"request_id": rid, "status": "completed", "artifact_path": str(artifact),
                 "receipt": status["receipt"], "source_check": self.check_source(rid)}
+
+    def import_result(self, rid: str, sha: str, markdown: str) -> dict:
+        remote = self._remote(rid)
+        if remote:
+            wrapper = _checked_bundle(self._private_job(rid) / "candidate.json")
+            if sha != wrapper["bundle_sha256"]:
+                raise BridgeError("BUNDLE_MISMATCH", "Result belongs to a different evidence snapshot.")
+            return remote.import_result(rid, sha, markdown)
+        return self.exchange.submit(rid, sha, markdown, source="manual_import")
 
     def prompt(self, rid: str) -> str:
         status = self.status(rid)

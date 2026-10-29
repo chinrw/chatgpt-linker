@@ -83,7 +83,7 @@ tool_timeout_sec = 330
 
 按[Codex 官方 MCP 文档](https://developers.openai.com/codex/mcp)注册。配置路径以实际安装/远程环境为准。全局 `--state` 必须放在 `serve-control` 前面。
 
-本地控制 MCP 只有三个**读**工具，不创建任务、不读取整个仓库、不联系 ChatGPT。准备/发布仍走本地 CLI，以免把任意文件路径能力放进远程复审接口。
+本地控制 MCP 提供三个查询工具，不创建任务、不读取整个仓库、不联系 ChatGPT。`review_result` 和 `review_wait` 在领取远端结果时会写入私有本地缓存，因此声明为可能写入的工具；`review_status` 保持只读。准备/发布仍走本地 CLI，以免把任意文件路径能力放进远程复审接口。
 
 ## 一次任务怎样结束
 
@@ -91,7 +91,7 @@ tool_timeout_sec = 330
 
 材料发布后，agent 展示完整可复制的提示词，再用 host 当前允许的 question 工具询问是否已经在 ChatGPT Pro 发送，提供「已发送，等待复审」和「稍后发送，保留任务」两个选项。异步问题必须收到实际回复才算确认。没有可用的 question 工具时，agent 以提示词和回复要求结束交接，等用户回复后接续同一个 request ID。选择稍后发送不会取消任务。
 
-`submit_review` 成功后，完整 Markdown 和回执一起原子发布。`review_wait` 单次最多 300 秒，结果一出现立即返回；skill 默认从用户确认发送或明确要求等待时起持续轮询 90 分钟（在调用时写明「最多等 N 小时」可覆盖），开始等待后不重复向用户确认。`completed` 表示复核交接完成，agent 随即核验报告并恢复原任务；`cancelled`、`expired` 或预算用尽时报告阻塞和 request ID。CLI `wait` 只等待本地结果，不执行项目代码；收到结果后的实现由 host agent 按原始授权推进。
+`submit_review` 成功后，完整 Markdown 和回执一起原子发布。`review_wait` 单次最多 300 秒，结果一出现立即返回；skill 默认从用户确认发送或明确要求等待时起持续轮询 90 分钟（在调用时写明「最多等 N 小时」可覆盖），开始等待后不重复向用户确认。`completed` 表示复核交接完成，agent 随即核验报告并恢复原任务；`cancelled`、`expired` 或预算用尽时报告阻塞和 request ID。CLI `wait` 等待本地或任务绑定节点上的结果，不执行项目代码；收到结果后的实现由 host agent 按原始授权推进。
 
 ```sh
 chatgpt-linker --state "$STATE" wait "$RID" --timeout 5400

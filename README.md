@@ -32,8 +32,14 @@ $ultraplan
 |---|---|---|
 | `search` / `fetch` | ChatGPT 端 MCP | 读取已批准的冻结材料；无任意路径 |
 | `submit_review` | ChatGPT 端 MCP | 只提交对应任务结果，无路径参数、覆盖或删除 |
-| `review_status` / `review_result` / `review_wait` | 可选本地 agent MCP | 查询本地任务，不联系 ChatGPT |
+| `review_status` / `review_result` / `review_wait` | 可选本地 agent MCP | 查询任务，远端结果缓存到本机，不联系 ChatGPT |
 | `prepare` / `publish` / `import` / `cancel` | 本地 CLI | 显式本地控制，不向 ChatGPT 暴露 |
+
+### 多台机器共用一个交换节点
+
+源机器可以通过 LAN 向独立节点提交冻结材料，并把 ChatGPT 结果下载回本地。交换节点运行 `serve-exchange`，与现有 tunnel 共用任务目录；源机器继续使用 `prepare`、`publish`、`wait` 和 `result`。不配置远端连接时保持单机用法。
+
+参见[LAN 交换节点与源机器配置](docs/LAN_EXCHANGE.zh-CN.md)，其中包含 HTTPS、访问令牌和失败后恢复同一任务的步骤。
 
 ## 安装与本地验证
 
@@ -256,7 +262,7 @@ chatgpt-linker result "$RID"
 chatgpt-linker wait "$RID" --timeout 5400
 ```
 
-返回的 `artifact_path` 指向固定 `review.md`，同时包含 SHA-256 回执和来源漂移检查。公开模式还检查 HEAD 及增量清单的变化，具体范围见[架构](docs/ARCHITECTURE.zh-CN.md#公开仓库与本地增量)。`wait` 只观察本地状态，不访问 ChatGPT。
+返回的 `artifact_path` 指向本机的固定 `review.md`，同时包含 SHA-256 回执和来源漂移检查。公开模式还检查 HEAD 及增量清单的变化，具体范围见[架构](docs/ARCHITECTURE.zh-CN.md#公开仓库与本地增量)。`wait` 查询本地或任务绑定的远端交换节点，不访问 ChatGPT。
 
 ## 安装 agent skill
 

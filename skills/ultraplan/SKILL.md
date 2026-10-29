@@ -12,6 +12,15 @@ Use the installed `chatgpt-linker` CLI with the user's state path (default
 lives OUTSIDE the source repository, one per project root, normally at
 `~/.config/chatgpt-linker/<project>.toml`. Look for it first.
 
+When the user has configured `CHATGPT_LINKER_EXCHANGE_URL` and its token-file
+path, prepare evidence on the source machine and use the same CLI workflow.
+The exchange node owns the ChatGPT connection. Use that connection for the
+handoff, and receive the result on the source machine. Existing tasks retain
+their node even without these environment variables; retry on that node after
+a timeout. To configure a new connection, follow
+`docs/LAN_EXCHANGE.zh-CN.md` in the Linker repository, keeping credentials out
+of prompts and evidence.
+
 If a previous request ID is provided, inspect/resume it instead of making a new
 task. Keep the request ID and bundle hash in the host agent's task state. Do not
 write a checkpoint to the source repository just to maintain this workflow.
