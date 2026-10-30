@@ -29,7 +29,9 @@ def emit(value: dict) -> None:
 
 
 def parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Review plans through ChatGPT's user-initiated MCP connection.")
+    # Keep subcommand --exchange distinct from the global --exchange-* flags.
+    p = argparse.ArgumentParser(description="Review plans through ChatGPT's user-initiated MCP connection.",
+                                allow_abbrev=False)
     p.add_argument("--version", action="version", version=__version__)
     p.add_argument("--state", type=Path, default=default_state(), help="Private state directory, outside the source repo")
     p.add_argument("--exchange-url", default=os.environ.get("CHATGPT_LINKER_EXCHANGE_URL"),
