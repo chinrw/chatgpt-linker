@@ -419,3 +419,123 @@ class ExchangeOriginTests(Fixture):
                     self.assertBridge('TARGET_MISMATCH', resumed.status, rid)
                     self.assertBridge('TARGET_MISMATCH', resumed.result, rid)
                     transport.assert_not_called()
+
+
+class ExchangeDeadlineTests(Fixture):
+    def start_server(self, tls=False):
+        import ssl
+        token = secrets.token_urlsafe(48)
+        context = client_context = None
+        if tls:
+            openssl = shutil.which('openssl')
+            if not openssl:
+                self.skipTest('OpenSSL is required for the TLS deadline test')
+            cert, key = self.base / 'deadline-cert.pem', self.base / 'deadline-key.pem'
+            subprocess.run([openssl, 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+                            '-subj', '/CN=localhost', '-addext', 'subjectAltName=IP:127.0.0.1',
+                            '-keyout', str(key), '-out', str(cert)], check=True, capture_output=True)
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.load_cert_chain(cert, key)
+            client_context = ssl.create_default_context(cafile=str(cert))
+        server = ExchangeHTTPServer(('127.0.0.1', 0), self.store.exchange, token, tls_context=context)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join, 3)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return server, client_context, token
+
+    def probe(self, server, context, token, rid):
+        if context:
+            conn = http.client.HTTPSConnection('127.0.0.1', server.server_port, timeout=2, context=context)
+        else:
+            conn = http.client.HTTPConnection('127.0.0.1', server.server_port, timeout=2)
+        try:
+            conn.request('GET', '/v1/tasks/' + rid, headers={'Authorization': 'Bearer ' + token})
+            response = conn.getresponse()
+            response.read()
+            self.assertEqual(response.status, 200)
+        finally:
+            conn.close()
+
+    def test_trickling_request_lines_and_headers_release_workers(self):
+        rid, _ = self.published()
+        for tls in (False, True):
+            with self.subTest(tls=tls), patch('chatgpt_linker.exchange_http.HEADER_TIMEOUT', 0.7, create=True):
+                server, context, token = self.start_server(tls)
+                peers = []
+                prefixes = [b'GET /', b'GET / HTTP/1.1\r\nX-Hold: ',
+                            b'GET / HTTP/1.1\nX-Hold: ', b'UNKNOWN / HTTP/1.1\r\nX-Hold: first\r\n']
+                try:
+                    for prefix in prefixes:
+                        peer = socket.create_connection(('127.0.0.1', server.server_port), timeout=2)
+                        if context:
+                            peer = context.wrap_socket(peer, server_hostname='127.0.0.1')
+                        peer.sendall(prefix)
+                        peers.append(peer)
+                    deadline = time.monotonic() + 1.4
+                    while time.monotonic() < deadline:
+                        for index, peer in enumerate(peers):
+                            try:
+                                peer.sendall(b' next\r\n' if index == 3 else b'x')
+                            except OSError:
+                                pass
+                        time.sleep(0.05)
+                    # The attackers stay connected until after the legitimate probe.
+                    self.probe(server, context, token, rid)
+                finally:
+                    for peer in peers:
+                        peer.close()
+
+    def test_incomplete_tls_handshakes_release_workers(self):
+        import ssl
+        rid, _ = self.published()
+        with patch('chatgpt_linker.exchange_http.HEADER_TIMEOUT', 0.7, create=True):
+            server, context, token = self.start_server(tls=True)
+            incoming, outgoing = ssl.MemoryBIO(), ssl.MemoryBIO()
+            client = context.wrap_bio(incoming, outgoing, server_hostname='127.0.0.1')
+            with self.assertRaises(ssl.SSLWantReadError):
+                client.do_handshake()
+            hello = outgoing.read()
+            peers = []
+            try:
+                for _ in range(4):
+                    peer = socket.create_connection(('127.0.0.1', server.server_port), timeout=2)
+                    peer.sendall(hello[:5])
+                    peers.append(peer)
+                offset, deadline = 5, time.monotonic() + 1.4
+                while time.monotonic() < deadline:
+                    for peer in peers:
+                        try:
+                            peer.sendall(hello[offset:offset + 1])
+                        except OSError:
+                            pass
+                    offset += 1
+                    time.sleep(0.05)
+                self.assertLess(offset, len(hello))
+                self.probe(server, context, token, rid)
+            finally:
+                for peer in peers:
+                    peer.close()
+
+    def test_authenticated_body_outlives_header_deadline_without_losing_buffered_bytes(self):
+        task = self.prepare()
+        wrapper = read_json(self.store.private / task['request_id'] / 'candidate.json')
+        body = canonical({'bundle': wrapper, 'ttl_hours': 24, 'allow_submit': True})
+        with patch('chatgpt_linker.exchange_http.HEADER_TIMEOUT', 0.2, create=True):
+            server, context, token = self.start_server(tls=True)
+            with socket.create_connection(('127.0.0.1', server.server_port), timeout=2) as raw:
+                with context.wrap_socket(raw, server_hostname='127.0.0.1') as peer:
+                    headers = (f'POST /v1/tasks HTTP/1.1\r\nHost: 127.0.0.1:{server.server_port}\r\n'
+                               f'Authorization: Bearer {token}\r\nContent-Type: application/json\r\n'
+                               f'Content-Length: {len(body)}\r\n\r\n').encode()
+                    split = len(body) // 2
+                    peer.sendall(headers + body[:split])
+                    time.sleep(0.4)
+                    peer.sendall(body[split:])
+                    response = http.client.HTTPResponse(peer)
+                    response.begin()
+                    result = json.loads(response.read())
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(result['bundle_sha256'], task['bundle_sha256'])
+        self.assertEqual(self.store.exchange.status(task['request_id'])['status'], 'waiting_for_chatgpt')

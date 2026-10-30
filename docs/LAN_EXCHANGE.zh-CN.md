@@ -34,6 +34,8 @@ chatgpt-linker serve-exchange \
   --tls-key "$HOME/.config/chatgpt-linker/exchange-key.pem"
 ```
 
+入口给 TLS 握手、请求行和完整请求头共用 15 秒的总时限，持续发送少量字节不会延长它。请求头解析完成后，正文上传和响应保持原有的 15 秒空闲超时。
+
 这是前台进程，退出会停止交换入口。在节点防火墙中仅允许需要的 LAN 来源访问该端口。`--exchange` 必须与 tunnel 使用的目录一致；自定义 `--state` 时需要相应调整。
 
 如果已有 HTTPS 反向代理，可以省略 `--listen` 和两个 TLS 参数，让后端只监听 `127.0.0.1:8767`。用 `--allow-host linker.example.internal` 指定代理转发的准确 Host；非默认端口要包含端口。代理应保留 Authorization，限制上传大小不超过 48 MiB，并且只向选定内网开放。直接监听 `0.0.0.0` 时必须提供 TLS 和明确的 `--allow-host`，不能使用通配 Host。

@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import http.client
+import io
 import ipaddress
 import socket
 import ssl
 import threading
+import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -16,6 +18,7 @@ from .protocol import MAX_MESSAGE, RpcError, loads
 from .store import Exchange, valid_rid
 
 DEFAULT_PORTS = {"http": 80, "https": 443}
+HEADER_TIMEOUT = 15
 
 
 def read_token(path: Path) -> str:
@@ -156,8 +159,49 @@ class ExchangeHTTPServer(BoundedHTTPServer):
         return conn, address
 
 
+class _HeaderDeadlineReader(io.RawIOBase):
+    """Apply the total header budget to every read below the buffered parser."""
+    def __init__(self, stream, connection):
+        super().__init__()
+        self.stream, self.connection = stream, connection
+        self.deadline = time.monotonic() + HEADER_TIMEOUT
+
+    def readable(self):
+        return True
+
+    def readinto(self, buffer):
+        if self.deadline is not None:
+            remaining = self.deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("Request headers exceeded their deadline.")
+            self.connection.settimeout(remaining)
+        return self.stream.readinto(buffer)
+
+    def close(self):
+        try:
+            self.stream.close()
+        finally:
+            super().close()
+
+
 class ExchangeHandler(Handler):
     server: ExchangeHTTPServer
+    # Each wrapped readinto must reach one socket read, not another buffered loop.
+    rbufsize = 0
+
+    def setup(self):
+        super().setup()
+        self.header_reader = _HeaderDeadlineReader(self.rfile, self.connection)
+        self.rfile = io.BufferedReader(self.header_reader)
+
+    def parse_request(self):
+        if not super().parse_request():
+            return False
+        if time.monotonic() >= self.header_reader.deadline:
+            raise TimeoutError("Request headers exceeded their deadline.")
+        self.header_reader.deadline = None
+        self.connection.settimeout(15)
+        return True
 
     def authorized(self) -> bool:
         try:
