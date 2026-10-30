@@ -40,6 +40,45 @@ chatgpt-linker serve-exchange \
 
 如果已有 HTTPS 反向代理，可以省略 `--listen` 和两个 TLS 参数，让后端只监听 `127.0.0.1:8767`。用 `--allow-host linker.example.internal` 指定代理转发的准确 Host；非默认端口要包含端口。代理应保留 Authorization，限制上传大小不超过 48 MiB，并且只向选定内网开放。直接监听 `0.0.0.0` 时必须提供 TLS 和明确的 `--allow-host`，不能使用通配 Host。
 
+### Home Manager 用户服务
+
+导入 Linker 的 Home Manager 模块后，可以声明交换入口，让 systemd 管理启动和重启：
+
+```nix
+programs.chatgpt-linker = {
+  enable = true;
+  exchange = {
+    enable = true;
+    listen = "192.168.1.10";
+    port = 8767;
+    tokenFile = "/run/user/1000/secrets/linker-exchange-token";
+    tlsCertFile = "/run/user/1000/secrets/linker-exchange-cert";
+    tlsKeyFile = "/run/user/1000/secrets/linker-exchange-key";
+  };
+  tunnel = {
+    enable = true;
+    tunnelId = "tunnel_example";
+    apiKeyFile = "/run/user/1000/secrets/linker-tunnel-key";
+  };
+};
+```
+
+两项服务共用 `programs.chatgpt-linker.exchangeDirectory`，默认是
+`${config.xdg.stateHome}/chatgpt-linker/exchange`。已有的
+`tunnel.exchangeDirectory` 仍是同一选项的兼容入口。模块准备私有目录，
+不创建凭据、发布授权或 ChatGPT 连接。`exchange.enable` 默认关闭；
+只安装 CLI 不会启动服务或要求凭据。这个交换服务选项目前由 Linux
+Home Manager 模块提供，现有 NixOS tunnel 模块保持原接口。
+
+`exchange.listen` 默认为 `127.0.0.1`，`port` 默认为 `8767`。
+已有 HTTPS 代理时可以使用 loopback 默认值并省略两个 TLS 文件；
+通过 `allowedHosts = [ "linker.example.internal" ];` 指定代理转发的 Host。
+
+凭据文件由部署配置提供；配置中只引用路径，不能读取内容放进 Nix store。
+使用 sops-nix 等凭据管理器时，由部署配置为对应 unit 声明解密顺序，
+例如 `systemd.user.services.chatgpt-linker-exchange.Unit.After = [ "sops-nix.service" ];`。
+主机地址、防火墙、凭据分发和用户 linger 也由部署环境管理。
+
 ## 配置源机器
 
 通过已有的安全通道把交换令牌及证书的公开部分交给源机器。令牌文件必须由当前用户持有，权限为 `0600`。交换节点的 TLS 私钥和 tunnel API key 留在节点上。
@@ -51,6 +90,10 @@ export CHATGPT_LINKER_EXCHANGE_CA_FILE="$HOME/.config/chatgpt-linker/exchange-ce
 ```
 
 受系统信任的证书无需设置 `CHATGPT_LINKER_EXCHANGE_CA_FILE`。等价的 CLI 全局参数为 `--exchange-url`、`--exchange-token-file` 和 `--exchange-ca-file`，放在子命令之前。客户端始终验证证书及主机名，不跟随重定向，也不使用环境中的 HTTP 代理。
+
+源机器只需 CLI 和 skill。Home Manager 可用 `home.sessionVariables` 设置上述
+三个值，token 和 CA 仍由部署环境提供。已有 shell 或 agent 不会自动获得新环境，
+切换后需要重新启动其会话，并用该会话验证一次任务发布和结果领取。
 
 接着按普通单机流程在源机器准备和发布任务，例如：
 
@@ -85,6 +128,11 @@ chatgpt-linker result "$RID"
 ## 单机用法和限制
 
 不设置交换连接参数的新任务仍使用本地 `exchange`，原有 stdio MCP 和本地调试 HTTP 用法保持不变。已绑定远端的任务继续使用保存的节点。
+
+迁移现有单机部署时，先启动交换节点并验证一台源机器的完整往返，再处理旧
+tunnel 上尚未完成的任务。旧的已发布任务仍属于原节点；完成或明确取消后才停用
+旧 tunnel。源机器保留 CLI、skill 和本地状态。个人 ChatGPT 插件的节点路由应随
+迁移更新，通用 `ultraplan` skill 不应写入具体主机名或凭据。
 
 LAN 入口只接收任务和结果操作，不提供 shell、任意文件读取或 ChatGPT 启动能力。客户端只允许向 loopback 使用明文 HTTP；其他地址需要 HTTPS。Tailscale 可作为到相同 HTTPS 入口的网络路径使用，无需 Linker 专用集成。
 

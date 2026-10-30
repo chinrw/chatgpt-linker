@@ -20,14 +20,10 @@ let
       --health.listen-addr ${lib.escapeShellArg "127.0.0.1:${toString cfg.healthPort}"} \
       --mcp.command ${lib.escapeShellArg "command=${mcp},channel=main"}
   '';
-  prepare = pkgs.writeShellScript "chatgpt-linker-prepare-exchange" ''
-    exec ${lib.getExe' pkgs.coreutils "install"} -d -m 0700 \
-      ${lib.escapeShellArgs [
-        cfg.exchangeDirectory
-        "${cfg.exchangeDirectory}/inbox"
-        "${cfg.exchangeDirectory}/outbox"
-      ]}
-  '';
+  prepare = import ./prepare-exchange.nix {
+    inherit lib pkgs;
+    inherit (cfg) exchangeDirectory;
+  };
 in
 {
   ExecStartPre = "${prepare}";

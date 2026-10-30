@@ -85,6 +85,7 @@ let
           home.username = "alice";
           home.homeDirectory = "/home/alice";
           home.stateVersion = "26.05";
+          xdg.stateHome = "${directory}/state";
           programs.chatgpt-linker.enable = true;
         }
         extra
@@ -92,6 +93,35 @@ let
     };
   hm = mkHome { programs.chatgpt-linker.tunnel = settings; };
   cliOnly = mkHome { };
+  exchangeSettings = {
+    enable = true;
+    listen = "127.0.0.1";
+    port = 18767;
+    tokenFile = "${directory}/exchange token";
+    tlsCertFile = "${directory}/exchange cert.pem";
+    tlsKeyFile = "${directory}/exchange key.pem";
+    allowedHosts = [ "localhost:18767" ];
+  };
+  exchangeHome = mkHome {
+    programs.chatgpt-linker = {
+      exchangeDirectory = "${directory}/exchange with spaces";
+      exchange = exchangeSettings;
+    };
+  };
+  combined = mkHome {
+    programs.chatgpt-linker = {
+      tunnel = settings;
+      exchange = exchangeSettings;
+    };
+  };
+  legacy = mkHome { services.chatgpt-linker = settings; };
+  invalidExchange =
+    extra:
+    mkHome {
+      programs.chatgpt-linker.exchange = exchangeSettings // extra;
+    };
+  failedHome = home: !(builtins.tryEval home.activationPackage.drvPath).success;
+  exchangeService = exchangeHome.config.systemd.user.services.chatgpt-linker-exchange.Service;
   tunnelOnly = mkHome {
     programs.chatgpt-linker = {
       enable = lib.mkForce false;
@@ -125,6 +155,38 @@ let
   };
 in
 assert !(cliOnly.config.systemd.user.services ? chatgpt-linker);
+assert !(cliOnly.config.systemd.user.services ? chatgpt-linker-exchange);
+assert !(cliOnly.config.home.activation ? chatgptLinkerState);
+assert !(exchangeHome.config.systemd.user.services ? chatgpt-linker);
+assert !(hm.config.systemd.user.services ? chatgpt-linker-exchange);
+assert combined.config.programs.chatgpt-linker.exchangeDirectory == settings.exchangeDirectory;
+assert legacy.config.programs.chatgpt-linker.exchangeDirectory == settings.exchangeDirectory;
+assert
+  combined.config.systemd.user.services.chatgpt-linker.Service.ExecStartPre
+  == combined.config.systemd.user.services.chatgpt-linker-exchange.Service.ExecStartPre;
+assert failedHome (mkHome {
+  programs.chatgpt-linker = {
+    enable = lib.mkForce false;
+    exchange = exchangeSettings;
+  };
+});
+assert failedHome (invalidExchange {
+  tlsKeyFile = null;
+});
+assert failedHome (invalidExchange {
+  listen = "192.0.2.1";
+  tlsKeyFile = null;
+  tlsCertFile = null;
+});
+assert failedHome (invalidExchange {
+  listen = "0.0.0.0";
+  allowedHosts = [ ];
+});
+assert
+  !(builtins.tryEval
+    (invalidExchange { tokenFile = "/nix/store/plaintext-token"; })
+    .config.systemd.user.services.chatgpt-linker-exchange.Service.ExecStart
+  ).success;
 assert !(builtins.tryEval tunnelOnly.activationPackage.drvPath).success;
 assert os.config.users.users.alice.linger;
 assert os.config.systemd.user.services.chatgpt-linker.unitConfig.ConditionUser == "alice";
@@ -155,7 +217,10 @@ assert lib.any (
 ) rootAlias.config.assertions;
 pkgs.runCommand "chatgpt-linker-tunnel-modules"
   {
-    nativeBuildInputs = [ pkgs.python3 ];
+    nativeBuildInputs = [
+      pkgs.python3
+      pkgs.openssl
+    ];
   }
   ''
     test ! -e ${lib.escapeShellArg directory}
@@ -164,6 +229,9 @@ pkgs.runCommand "chatgpt-linker-tunnel-modules"
     export RUNTIME_DIRECTORY=${directory}/runtime
     mkdir -m 0700 "$RUNTIME_DIRECTORY"
     export CONTROL_PLANE_API_KEY=synthetic-env-key OPENAI_API_KEY=synthetic-fallback OTHER_SECRET=synthetic-other
+    run() { "$@"; }
+    ${hm.config.home.activation.chatgptLinkerState.data}
+    test "$(stat -c %a '${directory}/state/chatgpt-linker')" = 700
     ${service.ExecStartPre}
     test "$(stat -c %a '${directory}/exchange with spaces')" = 700
     test "$(stat -c %a '${directory}/exchange with spaces/inbox')" = 700
@@ -179,5 +247,14 @@ pkgs.runCommand "chatgpt-linker-tunnel-modules"
     printf %s "$EXPECTED_KEY" > '${directory}/api key'
     ${service.ExecStart}
     TEST_REAL_LINKER=1 ${realService.ExecStart}
+    export PYTHONPATH=${../src}:${../tests}
+    python ${./test-exchange.py} ${
+      lib.escapeShellArgs [
+        exchangeService.ExecStartPre
+        exchangeService.ExecStart
+        (lib.getExe self.packages.${pkgs.stdenv.hostPlatform.system}.default)
+        directory
+      ]
+    }
     touch "$out"
   ''

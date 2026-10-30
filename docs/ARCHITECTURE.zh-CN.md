@@ -8,6 +8,11 @@ flake 导出 `homeManagerModules.default`（同 `homeManagerModules.chatgpt-link
 
 可选的 HM `programs.chatgpt-linker.tunnel` 与 NixOS `services.chatgpt-linker` 由 `nix/home-manager-service.nix` 和 `nix/nixos.nix` 分别接入 HM 与 NixOS。NixOS 模块通过 `nixosModules.default` 导出，设置指定用户的 linger 和 unit 的 `ConditionUser`。两者共用 `tunnel-options.nix` 与 `tunnel-service.nix`，避免认证参数和环境清理逻辑在两种部署中分歧。模块只引用运行时密钥路径，不读取密钥、不创建任务或发布授权。独立的 `tunnel-client-nix` flake 提供固定版本的官方发布包及配套文件；`nix/tests.nix` 使用真实模块求值、模拟 tunnel 进程和真实本地 stdio 协议检查，不联系 OpenAI。
 
+Home Manager 的 `programs.chatgpt-linker.exchange` 在 `nix/home-manager-exchange.nix`
+中提供独立的 LAN 用户服务，与 tunnel 共用 `exchangeDirectory` 和目录准备逻辑。
+服务模块负责启动、权限和重启；使用方负责主机选择、地址、运行时凭据及解密顺序。
+`nix/tests.nix` 还启动真实生成的 HTTPS 服务，验证重启后的任务重试及 MCP 结果领取。
+
 ```text
 src/chatgpt_linker/
   fs.py            openat/no-follow、私有权限、原子写入和文件锁

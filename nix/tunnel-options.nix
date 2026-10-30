@@ -5,14 +5,7 @@
   defaultExchangeDirectory,
 }:
 let
-  runtimePath = lib.types.addCheck lib.types.str (
-    value:
-    lib.hasPrefix "/" value
-    && value != builtins.storeDir
-    && !(lib.hasPrefix "${builtins.storeDir}/" value)
-    && !(lib.hasInfix "\n" value)
-    && !(lib.hasInfix "\r" value)
-  );
+  runtimePath = import ./runtime-path.nix { inherit lib; };
 in
 {
   enable = lib.mkEnableOption "the ChatGPT Linker tunnel user service";
