@@ -3,7 +3,6 @@ import copy
 import http.client
 import json
 import secrets
-import signal
 import shutil
 import socket
 import subprocess
@@ -307,7 +306,7 @@ class ExchangeTLSTests(Fixture):
         with socket.socket() as probe:
             probe.bind(('127.0.0.1', 0))
             port = probe.getsockname()[1]
-        process = subprocess.Popen([sys.executable, '-X', 'faulthandler', '-m', 'chatgpt_linker', 'serve-exchange',
+        process = subprocess.Popen([sys.executable, '-m', 'chatgpt_linker', 'serve-exchange',
                                     '--exchange', str(node.exchange.root), '--port', str(port),
                                     '--token-file', str(token), '--tls-cert', str(cert), '--tls-key', str(key)],
                                    env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -321,9 +320,7 @@ class ExchangeTLSTests(Fixture):
                         break
                 except OSError:
                     if time.monotonic() > deadline:
-                        process.send_signal(signal.SIGABRT)
-                        _, errors = process.communicate(timeout=5)
-                        self.fail('HTTPS listener did not start:\n' + errors.decode())
+                        self.fail('HTTPS listener did not start')
                     time.sleep(0.02)
             url = f'https://127.0.0.1:{port}'
             self.store.remote = RemoteExchange(url, str(token), str(cert))

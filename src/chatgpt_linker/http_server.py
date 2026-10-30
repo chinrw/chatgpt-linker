@@ -9,6 +9,7 @@ import hmac
 import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from socketserver import TCPServer
 
 from .protocol import MAX_MESSAGE, VERSIONS, MCPApplication, RpcError, encode, loads, rpc_error
 
@@ -25,6 +26,10 @@ class BoundedHTTPServer(ThreadingHTTPServer):
         self.slots = threading.BoundedSemaphore(32)
         super().__init__(address, handler)
 
+    def server_bind(self):
+        # Host checks use configured authorities; reverse DNS must not delay startup.
+        TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
     def process_request(self, request, client_address):
         if not self.slots.acquire(blocking=False):

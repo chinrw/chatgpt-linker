@@ -1,6 +1,7 @@
 import http.client
 import json
 import threading
+from unittest.mock import patch
 
 from support import Fixture, REVIEW
 from test_protocol import request
@@ -36,6 +37,21 @@ class HTTPTests(Fixture):
             return status, json.loads(data) if data else None
         finally:
             conn.close()
+
+    def test_listener_startup_without_reverse_dns(self):
+        from chatgpt_linker.exchange_http import ExchangeHTTPServer
+        factories = [
+            lambda: LocalHTTPServer(0, MCPApplication(self.store.exchange), self.token),
+            lambda: ExchangeHTTPServer(('127.0.0.1', 0), self.store.exchange, self.token),
+        ]
+        with patch('socket.getfqdn', side_effect=AssertionError('Reverse DNS must not gate startup')):
+            for factory in factories:
+                server = factory()
+                try:
+                    self.assertGreater(server.server_port, 0)
+                    self.assertEqual(server.server_address[0], '127.0.0.1')
+                finally:
+                    server.server_close()
 
     def test_http_roundtrip(self):
         status, result = self.send(request('initialize', {'protocolVersion':'2025-11-25'}))
