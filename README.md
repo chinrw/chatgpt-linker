@@ -9,7 +9,7 @@ a constrained MCP outbox, and an explicit-invocation agent skill.
 
 公开仓库增量模式还需要本机 Git 和匿名 GitHub API 的网络访问；普通本地材料模式无需这两项。
 
-> 自动化边界：你仍需在 ChatGPT 中选择所需 Pro 模型并发送一次任务提示；平台可能要求确认结果提交。程序不创建 ChatGPT 对话，不读取 Cookie，不抓取网页回答，也不能认证实际使用了哪个模型。首次必须用合成任务验证你的账号、模型和自定义工具组合。当前发布的本地测试不等于已完成真实 ChatGPT 接入。
+> 自动化边界：你仍需在 ChatGPT 的 Chat 中启用 Deep Research 并发送任务提示。研究阶段只读；报告完成后回到普通 Chat 提交，写工具不可用时导出 Markdown 本地导入。平台可能要求确认结果提交。程序不创建 ChatGPT 对话，不读取 Cookie，不抓取网页回答，也不能认证实际使用了哪个模型。首次必须用合成任务验证你的账号、模型和自定义工具组合。当前发布的本地测试不等于已完成真实 ChatGPT 接入。
 
 ## 正常工作流
 
@@ -17,23 +17,42 @@ a constrained MCP outbox, and an explicit-invocation agent skill.
 $ultraplan
   → agent 核验仓库可见性，选择 context、计划和本地改动
   → CLI 本地检查、冻结证据、发布任务
-  → 你在 ChatGPT Pro 中发送生成的短提示
-  → ChatGPT search / fetch，核验并重新规划
-  → ChatGPT submit_review，提交完整 Markdown
+  → 你在 ChatGPT 的 Chat 中启用 Deep Research，发送生成的提示
+  → 研究阶段通过 search / fetch 核验并重新规划
+  → 回到普通 Chat，通过 submit_review 提交完整 Markdown；或导出后本地导入
   → 本地 wait / review_result 取得结果和来源漂移检查
   → agent 核验报告，继续原任务中已授权的实现与测试
 ```
 
-源项目只读；服务端仅能把结果写到该任务的固定位置。**不是整个 MCP 都只读**：`submit_review` 明确是写工具。
+Linker CLI 捕获材料和远程复审保持源项目只读；服务端仅能把结果写到该任务的固定位置。**不是整个 MCP 都只读**：`submit_review` 明确是写工具。
 
-这里的源项目只读约束适用于材料准备和远程复核。若原始任务已经要求实现，agent 核验报告后会继续实现和测试，无需再次确认；仅规划/复核的请求仍以交付计划结束。
+本地 agent 可以根据自然语言请求查找上一轮、调查当前改动并选择材料，不需要用户提供固定格式、文件清单或任务 ID。原任务已授权诊断、实现或测试时，agent 可以在冻结前运行相关测试补足证据，核验报告后继续原任务，无需重复确认。单纯复审不自动授权代码修改或部署；可读取的本地材料也不等于可全部外发。
 
 | 接口 | 位置 | 权限 |
 |---|---|---|
 | `search` / `fetch` | ChatGPT 端 MCP | 读取已批准的冻结材料；无任意路径 |
 | `submit_review` | ChatGPT 端 MCP | 只提交对应任务结果，无路径参数、覆盖或删除 |
-| `review_status` / `review_result` / `review_wait` | 可选本地 agent MCP | 查询任务，远端结果缓存到本机，不联系 ChatGPT |
+| `review_list` / `review_status` / `review_result` / `review_wait` | 可选本地 agent MCP | 列出本机任务、查询并读取报告；远端结果缓存到本机，不联系 ChatGPT |
+| `review_mark_processed` | 可选本地 agent MCP | 显式记录已处理的报告哈希；不修改报告或授权实施 |
 | `prepare` / `publish` / `import` / `cancel` | 本地 CLI | 显式本地控制，不向 ChatGPT 暴露 |
+
+### 补充材料后继续追问
+
+已完成的复审可以通过 `followup` 继续，无需重新选择 policy 和已有材料：
+
+```sh
+chatgpt-linker followup "$PARENT_ID" \
+  --goal '根据补充测试结果，重新检查上一轮建议' \
+  --file tests/new-evidence.md
+chatgpt-linker publish "$CHILD_ID" --approve
+chatgpt-linker prompt "$CHILD_ID"
+```
+
+`CHILD_ID` 使用第一条命令返回的 `request_id`。新一轮沿用父任务的项目和交换节点，重新冻结所选文件，并附上经过校验和当前脱敏规则处理的上一轮上下文、完整报告。结果属于新的证据版本，上一轮保持不变。`--draft-stdin` 可补充当前背景和有效规则；材料范围已经核对时可使用 `--publish --approve` 一步准备并发布。
+
+如果旧文件已经删除、被替换或不再相关，agent 可用 `--replace-files` 和本轮的 `--file` 重新选择材料，并通过 `--selection-note` 解释移除原因。省略清单和说明会随本轮证据一起冻结，不会把缺失材料默认为没有变化。
+
+用户将生成的提示发到原 ChatGPT 对话或新对话即可；本程序不创建或控制 ChatGPT 会话。用 `list --conversation "$CONVERSATION_ID"` 查看各轮和分支，根任务 ID 就是 conversation ID。详见[父子复审流程](docs/AGENT_WORKFLOW.zh-CN.md#父子复审与补充材料)。
 
 ### 多台机器共用一个交换节点
 
@@ -199,9 +218,11 @@ chatgpt-linker publish "$RID" --approve
 chatgpt-linker prompt "$RID"
 ```
 
+新建 policy 时可以省略 `--allow`，默认以项目根目录为选择范围，让 agent 自选必要文件；显式传入 `--allow` 则只允许这些 glob。目录范围不等于上传清单，凭据拦截和已有排除规则继续生效。默认仍不启用长期 auto_publish，也不覆盖已有 policy。
+
 `--approve` 是你对本次外发材料的批准。日常使用时，可以由你在可信 policy 中开启 `auto_publish = true`；之后 agent 在该范围内使用 `prepare --publish`。不要让 agent 自行扩大范围。
 
-显式调用 `$ultraplan` 已授权本次复审所需材料的准备和发布，agent 无需再要求你回复一次确认。首次缺少 policy 时，agent 可按本次范围创建 policy 并执行 `publish --approve`；长期 `auto_publish` 和已有 policy 的范围扩大仍需相应授权。
+显式调用 `$ultraplan` 已授权当前项目和任务范围内的材料准备、发布，以及最多两轮有实质性问题的追加复审（用户指定轮数或只审一轮时覆盖默认值）。agent 自选文件，不要求逐文件或逐轮确认；仍需用户在 ChatGPT 发送各轮提示。首次缺少 policy 时，agent 可按本次范围创建 policy 并执行 `publish --approve`；长期 `auto_publish` 和已有 policy 的范围扩大仍需相应授权。
 
 每次复核的 context 都包含 `Effective task rules`：由本地 agent 按当前 host 的优先级汇总会话、user-scope、仓库及相关子目录的有效规则，涵盖 README/文档、代码注释、commit message 和验证要求。公开仓库也携带这份摘要；不会把全局规则文件和私人配置整份上传。CLI 不会自动发现这些规则，收集与后续执行由 skill 指导 host agent 完成。
 
@@ -260,7 +281,7 @@ chatgpt-linker result "$RID"
 
 官方 Tunnel 是传输方式，不是模型 API 后端。应使用清理环境的 launcher 启动 `serve`（`scripts/tunnel-launcher.example.sh` 的形状：`env -i` + 绝对路径解释器 + 空 HOME）。**本项目不提供 OS 级文件系统隔离**：launcher 只清理环境，进程读权限仍等同于你的账号；需要更强隔离请自行用沙箱运行同一条 `serve` 命令。**本项目没有公网 OAuth 服务；不要把本地调试 HTTP 端口直接暴露到互联网。**
 
-连接后，工具清单应只有 `search`、`fetch`、`submit_review`。在 ChatGPT 中选择 Pro，发送 `prompt "$RID"` 的结果。调用成功后：
+连接后，工具清单应只有 `search`、`fetch`、`submit_review`。在 ChatGPT 的 Chat 中启用 Deep Research 并确认 Linker 来源可用，发送 `prompt "$RID"` 的结果。研究完成后在普通 Chat 提交完整报告；只有 submit_review 成功才完成交接。等待结果：
 
 ```sh
 chatgpt-linker wait "$RID" --timeout 5400

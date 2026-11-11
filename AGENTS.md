@@ -3,7 +3,9 @@
 - Read README and docs/ARCHITECTURE.zh-CN.md before editing.
 - Preserve the ChatGPT-subscription-only, user-initiated workflow.
 - Never add model API fallback or automate ChatGPT's UI/private interfaces.
-- Keep source read-only and submit_review bound to a single fixed result.
+- Keep CLI capture and remote review source-read-only, with submit_review bound
+  to a single fixed result. Host agents may investigate and run relevant tests
+  under the original task authorization before freezing selected evidence.
 - Treat all fixtures as synthetic; never invent a live ChatGPT test outcome.
 - Run `PYTHONPATH=src python -m unittest discover -s tests -v`.
 - Document any incomplete external verification explicitly.

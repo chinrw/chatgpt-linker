@@ -86,7 +86,7 @@ submit_review   readOnlyHint = false
 
 ## 4. 必须执行的真实账号验收
 
-准备一份**新的合成任务**，执行 `chatgpt-linker prompt <id>`，把生成的短提示发送到刚建立的 ChatGPT Pro 会话。
+准备一份**新的合成任务**，执行 `chatgpt-linker prompt <id>`，在 ChatGPT 的 Chat 中通过工具菜单或 `/Deepresearch` 启用 Deep Research，确认 Linker 可以作为研究来源，再发送生成的提示。仅粘贴提示不会切换模式。研究阶段不使用 app 写操作；报告完成后回到普通 Chat，按提示中的 request ID 和 bundle hash 调用 submit_review 交回完整 Markdown。写工具不可用时导出 Markdown，并由本地 CLI import。
 
 验收顺序：
 
@@ -150,3 +150,7 @@ exec <你的沙箱> -- /absolute/path/to/.venv/bin/chatgpt-linker serve --exchan
 [1] [Secure MCP Tunnel](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels)。
 [2] [Connect and test your plugin](https://developers.openai.com/plugins/deploy/connect-chatgpt)。
 [3] [ChatGPT Developer mode](https://developers.openai.com/api/docs/guides/developer-mode)。
+
+### Deep Research 的读写边界
+
+2026-11-11 核对的 [OpenAI 官方说明](https://help.openai.com/en/articles/10500283-deep-research-in-chatgpt)明确说明，Deep Research 仅使用 connected apps 的读取操作，不在研究过程中执行写操作；app 还必须支持该模式并对账号和 workspace 可用。Linker 的发布成功不能证明这些条件已经满足。需要分别验收读取材料、生成完整报告和普通 Chat 提交结果，不能用本地测试代替真实账号验收。Deep Research 也不等同于指定 API reasoning.mode=pro 或某个模型 ID。

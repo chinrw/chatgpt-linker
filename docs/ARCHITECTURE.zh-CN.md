@@ -33,6 +33,7 @@ state/                            0700；不在被审查项目中
     candidate.json               已扫描的候选包，不是原始秘密副本
     provenance.json              本地项目路径、策略 hash、所选原始文件 hash
     remote.json                  远端任务的固定节点和本机凭据文件路径（可选）
+    processed.json               显式本地处理记录，绑定 bundle 与 result 哈希（可选）
     result/                      远端结果下载后的 Markdown 和原始回执（可选）
   exchange/
     inbox/<request_id>/
@@ -89,9 +90,9 @@ CRLF/CR 统一为 LF；显示路径可以脱敏，因此源行号是冻结文本
 
 结果必须包含六个二级标题：`Summary`、`Evidence`、`Plan`、`Validation`、`Risks`、`Open Questions`，正文语言自由。引用形如 `[d0001:L1-L3]`；至少一个有效引用，所有匹配该格式的引用均须在范围内。
 
-引用检查只验证文档/行范围存在，不验证论证正确性或引用完整性，也不保证模型没有遗漏信息。公开模式允许另附固定 commit 的 blob URL / 行锚点；这些外部引用不由服务端校验，仍要求至少一个有效本地文档引用（例如 context 或计划）。复审方无法读取公开代码时必须报告缺口；用新任务补充所需 `--file` 材料。
+引用检查只验证文档/行范围存在，不验证论证正确性或引用完整性，也不保证模型没有遗漏信息。公开模式允许另附固定 commit 的 blob URL / 行锚点；这些外部引用不由服务端校验，仍要求至少一个有效本地文档引用（例如 context 或计划）。复审方无法读取公开代码时必须报告缺口；完成后可通过 `followup` 补充所需 `--file` 材料。
 
-`search/fetch` 是只读；`submit_review` 是非破坏性的写入。已成功提交后，相同字节返回原回执，不同字节报 `RESULT_CONFLICT`。更新计划请新建任务；没有 overwrite、append 或 delete 工具。
+`search/fetch` 是只读；`submit_review` 是非破坏性的写入。已成功提交后，相同字节返回原回执，不同字节报 `RESULT_CONFLICT`。更新计划通过本地 `followup` 创建关联的子轮次；没有 overwrite、append 或 delete 工具。
 
 每个连接可通过 `serve --request <id>` 缩小至一个任务。默认该私有连接能访问**这个用户已经发布的任务**，没有会话身份到任务的多租户 ACL。随机 request ID 不是鉴权密钥；不要分享连接或允许多个用户共用。
 
@@ -137,3 +138,27 @@ chatgpt-linker serve --exchange "$HOME/.local/state/chatgpt-linker/exchange" \
 ## 不存在的能力
 
 没有主动调用 ChatGPT Pro、模型 API fallback、网页自动化、shell 工具、自动代码实施、任意路径工具、后台会话复活、完整项目同步、多用户 OAuth。后续扩展必须保留这些权限边界，不用新的功能名称掩盖写入或扩大外发范围。
+
+## 本地任务发现与报告消费
+
+本地控制 MCP 增加 `review_list(project?, status?, cursor=0, limit=20)` 和 `review_mark_processed(request_id, result_sha256)`。CLI 对应 `list` 与 `mark-processed`。列表只扫描 private 下合法 request ID，沿用任务绑定的节点，并验证 bundle 与状态对应关系；单任务错误列入 errors，不能当作没有结果。它不下载报告、不建立处理标记，也不向远端复审工具暴露项目路径。
+
+`status=unprocessed` 选择 completed 且无有效本地处理记录的报告。处理标记必须由显式调用创建，先完成原有结果完整性和来源漂移检查，匹配调用方提供的结果哈希，再以任务锁和私有文件原子记录。重复调用保留原时间；记录不覆盖冻结证据或远端回执。标记可以表示已审阅并拒绝建议，不表示源码漂移被解决或实施已经获准。
+
+`result` 和 `review_result` 默认返回至多 12000 字符的正文，并给出 offset、next_offset 与 total_chars。offset 按 Unicode 码点计数，不是 UTF-8 字节或 UTF-16 单元。完整结果仍保存为原有 review.md；每页重验实际返回正文所属完整文件的哈希和长度，保持 receipt 和 source_check。完成后的 wait 返回同一结果结构。未完成、撤销、损坏和节点错误继续沿用原有错误机制。
+
+## 父子复审
+
+`followup(parent, goal, files, draft?)` 复用 prepare 的扫描、快照与发布路径。准备阶段先校验父任务完整报告，再按当前 policy 读取当前源码；父轮 source_check 出现漂移不阻止新一轮捕获，子轮自己的捕获和发布仍要求一致。父材料、报告、处理标记和授权均不被修改；远端结果尚未缓存时允许沿原有领取路径建立父报告缓存。
+
+本地 provenance 保存 parent 的 request ID、bundle hash、原始 result hash、conversation ID 和 round。历史上下文与报告作为普通 evidence 文档进入原有 schema_version=1 bundle，其文档哈希覆盖本轮实际文本。远端无需增加工具或 schema，也不需要再次访问父任务。provenance 还保存显式文件选择和公开基线元数据，供后续重算当前材料；旧任务没有这些字段时采用文档所述的兼容选择。
+
+子任务准备时将父节点配置保存在私有 provenance.parent_exchange，仍保持 prepared 状态；只有首次 publish 才按原有规则将 remote.json 写入并发送。任务随后仍固定原节点，配置漂移或网络错误不能把下一轮转到其他交换节点。本地父任务也不能自动转成远端子任务。节点配置和凭据文件路径不进入 bundle。
+
+conversation ID 为根 request ID，根轮 round=1；子轮 round 为父轮加一，分支可以有相同 round。LocalStore 的 status/result/list 返回这些关系，`list` 可按 conversation_id 筛选。它是源机器的任务关系，不承诺创建、识别、恢复或操纵 ChatGPT 会话。父轮取消不自动撤销已独立准备或发布的子轮；需要停止某轮时对该轮显式 cancel。
+
+## 本轮材料重选
+
+`followup --replace-files` 将本轮显式选中路径替换为所有 `--file` 的去重结果；默认仍追加到继承列表。省略的旧路径必须由 `--selection-note` 解释，空说明会报 SELECTION_NOTE_REQUIRED。材料选择变化作为普通 evidence 文档写入冻结包，并纳入文档数、总量和当前脱敏扫描；本地 provenance 保存对应选择记录。public mode 仅替换显式补充文件，公开增量的完整选择仍由现有机制负责。
+
+工具不会以路径被省略为依据推断删除，也不会自动省略读取失败或扫描失败的文件。host agent 在任务授权下调查、测试并作出选择，CLI 继续负责捕获、校验和发布边界。选择记录与历史报告会让远端复审方看见本轮材料的变化和缺口。

@@ -49,6 +49,41 @@ class PublicEvidenceTests(Fixture):
     def documents(self, task):
         return json.loads((self.store.private / task['request_id'] / 'candidate.json').read_text())['payload']['documents']
 
+    def test_followup_rechecks_public_baseline_and_refreshes_overlay(self):
+        (self.repo / 'code.py').write_text('old revision\n')
+        parent = self.task()
+        self.store.publish(parent['request_id'], approve=True)
+        self.store.exchange.submit(parent['request_id'], parent['bundle_sha256'], REVIEW)
+        (self.repo / 'code.py').unlink()
+        (self.repo / 'new.py').write_text('new revision\n')
+        before = self.mock_api.call_count
+        child = self.store.followup(parent['request_id'], 'Review new revision', [])
+        self.assertEqual(self.mock_api.call_count - before, 2)
+        self.assertEqual(child['public_baseline']['baseline_sha'], self.sha)
+        docs = self.documents(child)
+        baseline = next(d['text'] for d in docs if d['kind'] == 'public_baseline')
+        self.assertIn('"status": "D"', baseline)
+        self.assertIn('"path": "code.py"', baseline)
+        self.assertIn('new.py', [d['title'] for d in docs])
+        self.assertNotIn('code.py', [d['title'] for d in docs])
+        self.assertIn('Previous review (historical)', [d['title'] for d in docs])
+        self.store.publish(child['request_id'], approve=True)
+        self.assertTrue(self.store.check_source(child['request_id'])['unchanged'])
+
+    def test_reselection_does_not_suppress_public_overlay(self):
+        parent = self.store.prepare(self.policy, None, ['PLAN.md'], 'Review',
+                                    draft='Context\nPlan\nValidation\n', public_repo=True)
+        self.store.publish(parent['request_id'], approve=True)
+        self.store.exchange.submit(parent['request_id'], parent['bundle_sha256'], REVIEW)
+        (self.repo / 'code.py').write_text('updated implementation\n')
+        child = self.store.followup(parent['request_id'], 'Review changes', [], replace_files=True,
+                                    selection_note='The old plan file is no longer a supplemental input.')
+        docs = {d['title']: d['text'] for d in self.documents(child)}
+        self.assertEqual(docs['code.py'], 'updated implementation\n')
+        self.assertNotIn('PLAN.md', docs)
+        self.assertIn('explicit supplements', docs['Material selection changes'])
+        self.assertEqual(child['skipped'], [])
+
     def test_clean_tree_sends_only_plan_and_public_pointer(self):
         task = self.task()
         docs = self.documents(task)

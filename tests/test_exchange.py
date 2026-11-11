@@ -99,12 +99,67 @@ class ExchangeTests(Fixture):
         self.node.exchange.submit(rid, sha, REVIEW)
         control = MCPApplication(local=LocalStore(self.store.root))
         hints = {tool['name']: tool['annotations']['readOnlyHint'] for tool in control.definitions}
-        self.assertEqual(hints, {'review_status': True, 'review_result': False, 'review_wait': False})
+        self.assertEqual(hints, {'review_status': True, 'review_result': False, 'review_wait': False, 'review_list': True, 'review_mark_processed': False})
         response = control.handle({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
             'name': 'review_wait', 'arguments': {'request_id': rid, 'timeout_seconds': 0}}})
         result = response['result']['structuredContent']
         self.assertEqual(Path(result['artifact_path']).read_text(), REVIEW)
         self.assertEqual(result['receipt']['source'], 'mcp_submit')
+
+    def test_local_inbox_lists_remote_results_and_processing_survives_restart(self):
+        rid, sha = self.published()
+        self.node.exchange.submit(rid, sha, REVIEW)
+        local = LocalStore(self.store.root)
+        listed = local.list_tasks(status='unprocessed')
+        self.assertEqual([x['request_id'] for x in listed['tasks']], [rid])
+        self.assertFalse((local.private / rid / 'result').exists())
+        result = local.result(rid, max_chars=11)
+        self.assertEqual(result['markdown'], REVIEW[:11])
+        self.assertEqual(len(local.list_tasks(status='unprocessed')['tasks']), 1)
+        local.mark_processed(rid, result['receipt']['result_sha256'])
+        self.assertEqual(LocalStore(local.root).list_tasks(status='unprocessed')['tasks'], [])
+        self.assertFalse((self.node.exchange.outbox / rid / 'processed.json').exists())
+        self.assertEqual(self.node.exchange.result(rid)['markdown'], REVIEW)
+        Path(result['artifact_path']).write_text(REVIEW + 'tampered')
+        self.assertBridge('INTEGRITY_ERROR', local.result, rid)
+        self.assertBridge('INTEGRITY_ERROR', local.mark_processed, rid, result['receipt']['result_sha256'])
+
+    def test_followup_retains_parent_exchange_without_environment_defaults(self):
+        rid, sha = self.published()
+        self.node.exchange.submit(rid, sha, REVIEW)
+        local = LocalStore(self.store.root)
+        child = local.followup(rid, 'Review the revision', [])
+        cid = child['request_id']
+        self.assertEqual(local.status(cid)['status'], 'prepared')
+        self.assertFalse((local.private / cid / 'remote.json').exists())
+        self.assertFalse((self.node.exchange.inbox / cid).exists())
+        local.publish(cid, approve=True)
+        self.assertEqual(local.status(cid)['status'], 'waiting_for_chatgpt')
+        self.assertEqual(read_json(local.private / cid / 'remote.json')['url'], self.remote.url)
+        self.node.exchange.submit(cid, child['bundle_sha256'], REVIEW)
+        self.assertEqual(local.result(cid)['parent_request_id'], rid)
+        self.assertEqual(local.result(cid)['conversation_id'], rid)
+        self.assertEqual(local.result(cid)['round'], 2)
+        self.assertEqual(self.node.exchange.result(rid)['markdown'], REVIEW)
+
+    def test_followup_cannot_redirect_prepared_child_to_another_node(self):
+        rid, sha = self.published()
+        self.node.exchange.submit(rid, sha, REVIEW)
+        local = LocalStore(self.store.root)
+        child = local.followup(rid, 'Question', [])
+        other = RemoteExchange('http://127.0.0.1:1', str(self.token_file))
+        redirected = LocalStore(self.store.root, remote=other)
+        self.assertBridge('TARGET_MISMATCH', redirected.followup, rid, 'Question', [])
+        self.assertBridge('TARGET_MISMATCH', redirected.publish, child['request_id'], approve=True)
+        self.assertFalse((local.private / child['request_id'] / 'remote.json').exists())
+
+    def test_inbox_keeps_exchange_failures_visible(self):
+        rid, _ = self.published()
+        with patch.object(RemoteExchange, 'status', side_effect=BridgeError('EXCHANGE_UNREACHABLE', 'Exchange is unreachable.')):
+            page = LocalStore(self.store.root).list_tasks(status='unprocessed')
+        self.assertEqual(page['tasks'], [])
+        self.assertEqual(page['errors'][0]['request_id'], rid)
+        self.assertEqual(page['errors'][0]['error'], 'EXCHANGE_UNREACHABLE')
 
     def test_approval_source_and_policy_checks_precede_network_publication(self):
         task = self.prepare()

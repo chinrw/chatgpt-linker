@@ -70,3 +70,43 @@ class CLITests(Fixture):
         self.assertEqual(p.returncode,2)
         self.assertEqual(json.loads(p.stderr)['error'],'STATE_IN_PROJECT')
         self.assertFalse(target.exists())
+
+    def test_prompt_requests_deep_research_then_separate_chat_submission(self):
+        rid, sha = self.published()
+        response = self.run_cli('prompt', rid)
+        self.assertEqual(response.returncode, 0, response.stderr)
+        prompt = response.stdout
+        self.assertIn('/Deepresearch', prompt)
+        self.assertIn('仅粘贴提示词不会切换模式', prompt)
+        self.assertIn('Deep Research 不执行 app 写操作', prompt)
+        self.assertLess(prompt.index('普通 Chat'), prompt.index('submit_review'))
+        self.assertIn(rid + ':request', prompt)
+        self.assertIn('bundle_sha256=' + sha, prompt)
+        self.assertIn('不是摘要', prompt)
+        self.assertIn('导入', prompt)
+        self.assertEqual(self.store.status(rid)['status'], 'waiting_for_chatgpt')
+
+    def test_project_policy_default_allows_agent_selection_but_blocks_credentials(self):
+        policy = self.base / 'config' / 'project.toml'
+        result = self.run_cli('policy-init', '--repo', str(self.repo), '--output', str(policy))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        from chatgpt_linker.sanitize import Policy
+        loaded = Policy.load(policy)
+        self.assertFalse(loaded.auto_publish)
+        (self.repo / 'nested').mkdir()
+        (self.repo / 'nested' / 'case.py').write_text('assert 2 + 2 == 4\n')
+        task = self.store.prepare(policy, 'PLAN.md', ['nested/case.py'], 'Check nested implementation')
+        self.assertEqual(task['files'], 2)
+        self.assertBridge('APPROVAL_REQUIRED', self.store.publish, task['request_id'])
+        (self.repo / 'nested' / 'case.py').write_text('OPENAI_API_KEY=' + 'a8b7c6d5' * 8)
+        self.assertBridge('SECRET_DETECTED', self.store.prepare, policy, 'PLAN.md', ['nested/case.py'], 'Review')
+        self.assertNotEqual(self.run_cli('policy-init', '--repo', str(self.repo), '--output', str(policy)).returncode, 0)
+
+    def test_explicit_policy_scope_and_exclusions_remain_effective(self):
+        policy = self.base / 'config' / 'narrow.toml'
+        result = self.run_cli('policy-init', '--repo', str(self.repo), '--output', str(policy),
+                              '--allow', '*.md', '--deny', 'internal.md')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertBridge('OUT_OF_SCOPE', self.store.prepare, policy, 'PLAN.md', ['code.py'], 'Review')
+        (self.repo / 'internal.md').write_text('Excluded material\n')
+        self.assertBridge('EXCLUDED_FILE', self.store.prepare, policy, 'PLAN.md', ['internal.md'], 'Review')

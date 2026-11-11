@@ -49,7 +49,7 @@ def parser() -> argparse.ArgumentParser:
     policy = sub.add_parser("policy-init", help="Create a USER-approved publication policy outside the repo")
     policy.add_argument("--repo", type=Path, required=True)
     policy.add_argument("--output", type=Path, required=True)
-    policy.add_argument("--allow", action="append", required=True, help="Approved relative path glob; repeatable")
+    policy.add_argument("--allow", action="append", help="Narrow selection to these relative globs; defaults to the whole project")
     policy.add_argument("--deny", action="append", default=[], help="Relative path glob excluded even when allowed; repeatable")
     policy.add_argument("--auto-publish", action="store_true", help="Authorize future selected inputs within this scope")
     prep = sub.add_parser("prepare", help="Scan and freeze explicitly selected evidence")
@@ -65,6 +65,15 @@ def parser() -> argparse.ArgumentParser:
     prep.add_argument("--glob", action="append", default=[], help="Narrow --auto to matching relative paths; repeatable")
     prep.add_argument("--goal", required=True)
     prep.add_argument("--publish", action="store_true", help="Publish only if policy auto_publish is true")
+    follow = sub.add_parser("followup", help="Continue a completed review with refreshed evidence and additional files")
+    follow.add_argument("parent_request_id")
+    follow.add_argument("--goal", required=True, help="Question for the next review round")
+    follow.add_argument("--file", action="append", default=[], help="Additional approved relative file; repeatable")
+    follow.add_argument("--replace-files", action="store_true", help="Use only this round's --file selections; public overlays still refresh")
+    follow.add_argument("--selection-note", help="Explain removed or replaced evidence; required when omitting prior selections")
+    follow.add_argument("--draft-stdin", action="store_true", help="Read updated context and effective rules from stdin")
+    follow.add_argument("--publish", action="store_true")
+    follow.add_argument("--approve", action="store_true", help="Explicit one-time approval for publishing this round")
     pub = sub.add_parser("publish", help="Publish a frozen task and grant the private MCP access")
     pub.add_argument("request_id")
     pub.add_argument("--approve", action="store_true", help="Explicit one-time approval of this task's upload scope")
@@ -72,6 +81,18 @@ def parser() -> argparse.ArgumentParser:
     for name in ("status", "prompt", "result", "check", "cancel"):
         s = sub.add_parser(name)
         s.add_argument("request_id")
+        if name == "result":
+            s.add_argument("--offset", type=int, default=0)
+            s.add_argument("--max-chars", type=int, default=12000)
+    listing = sub.add_parser("list", help="List local tasks and their pinned exchange status")
+    listing.add_argument("--project", help="Filter by exact absolute project root")
+    listing.add_argument("--status", choices=("prepared", "waiting_for_chatgpt", "completed", "cancelled", "expired", "unprocessed"))
+    listing.add_argument("--conversation", dest="conversation_id", help="Root request ID of a review conversation")
+    listing.add_argument("--cursor", type=int, default=0)
+    listing.add_argument("--limit", type=int, default=20)
+    processed = sub.add_parser("mark-processed", help="Explicitly acknowledge a verified report locally")
+    processed.add_argument("request_id")
+    processed.add_argument("--result-sha256", required=True)
     wait = sub.add_parser("wait", help="Wait on the task exchange, never ChatGPT; exit 3 on timeout")
     wait.add_argument("request_id")
     # 90 min: one ChatGPT Pro reasoning pass can run close to an hour.
@@ -88,7 +109,7 @@ def parser() -> argparse.ArgumentParser:
     serve.add_argument("--transport", choices=("stdio", "http"), default="stdio")
     serve.add_argument("--port", type=int, default=8766)
     serve.add_argument("--token-file", type=Path, help="Required for local HTTP; private file containing a local bearer token")
-    sub.add_parser("serve-control", help="LOCAL agent stdio MCP: review_status, review_result, review_wait")
+    sub.add_parser("serve-control", help="LOCAL agent stdio MCP: task listing, reports, waiting and processing acknowledgements")
     node = sub.add_parser("serve-exchange", help="Authenticated task upload and result retrieval for your machines")
     node.add_argument("--exchange", type=Path, required=True, help="The same exchange directory used by the tunnel MCP")
     node.add_argument("--listen", default="127.0.0.1", help="IPv4 bind address; non-loopback requires TLS")
@@ -115,7 +136,7 @@ def run(args: argparse.Namespace) -> int:
             raise BridgeError("UNTRUSTED_POLICY", "Policy must be outside the source project.")
         private_dir(output.parent)
         content = ("version = 1\n" + f"project_root = {json.dumps(str(repo))}\n" +
-                   f"allowed_globs = {json.dumps(args.allow)}\n" +
+                   f"allowed_globs = {json.dumps(args.allow or ["*"])}\n" +
                    f"denied_globs = {json.dumps(args.deny)}\n" +
                    f"auto_publish = {str(args.auto_publish).lower()}\n" +
                    "redact_emails = true\nredact_private_ips = true\nttl_hours = 24\nblock_literals = []\n")
@@ -199,7 +220,9 @@ def run(args: argparse.Namespace) -> int:
     store = LocalStore(args.state, create=args.command in ("init", "prepare"), remote=remote)
     if args.command == "init":
         emit({"state": str(store.root), "exchange": str(store.exchange.root)})
-    elif args.command == "prepare":
+    elif args.command in ("prepare", "followup"):
+        if args.command == "followup" and args.approve and not args.publish:
+            raise BridgeError("INVALID_APPROVAL", "--approve requires --publish.")
         draft = None
         if args.draft_stdin:
             try:
@@ -209,11 +232,15 @@ def run(args: argparse.Namespace) -> int:
                 draft = raw.decode("utf-8")
             except (ValueError, UnicodeError) as exc:
                 raise BridgeError("INVALID_PLAN", "Draft must be bounded UTF-8 text.") from exc
-        prepared = store.prepare(args.policy, args.plan, args.file, args.goal, draft=draft, auto=args.auto, globs=args.glob,
-                                 public_repo=args.public_repo, remote=args.remote, base=args.base)
+        if args.command == "followup":
+            prepared = store.followup(args.parent_request_id, args.goal, args.file, draft=draft,
+                                      replace_files=args.replace_files, selection_note=args.selection_note)
+        else:
+            prepared = store.prepare(args.policy, args.plan, args.file, args.goal, draft=draft, auto=args.auto, globs=args.glob,
+                                     public_repo=args.public_repo, remote=args.remote, base=args.base)
         if args.publish:
             try:
-                prepared = {**prepared, **store.publish(prepared["request_id"])}  # keep files/skipped visible
+                prepared = {**prepared, **store.publish(prepared["request_id"], approve=getattr(args, "approve", False))}  # keep files/skipped visible
             except BridgeError as exc:
                 emit({**prepared, **exc.as_dict()})
                 return 2
@@ -225,7 +252,11 @@ def run(args: argparse.Namespace) -> int:
     elif args.command == "prompt":
         print(store.prompt(args.request_id))
     elif args.command == "result":
-        emit(store.result(args.request_id))
+        emit(store.result(args.request_id, offset=args.offset, max_chars=args.max_chars))
+    elif args.command == "list":
+        emit(store.list_tasks(project=args.project, status=args.status, cursor=args.cursor, limit=args.limit, conversation_id=args.conversation_id))
+    elif args.command == "mark-processed":
+        emit(store.mark_processed(args.request_id, args.result_sha256))
     elif args.command == "check":
         check = store.check_source(args.request_id)
         emit(check)

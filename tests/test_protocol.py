@@ -122,7 +122,7 @@ class ProtocolTests(Fixture):
 
     def test_control_surface_and_wait_resume(self):
         control = MCPApplication(local=self.store)
-        self.assertEqual([x['name'] for x in control.definitions], ['review_status', 'review_result', 'review_wait'])
+        self.assertEqual([x['name'] for x in control.definitions], ['review_status', 'review_result', 'review_wait', 'review_list', 'review_mark_processed'])
         args = {'request_id': self.rid, 'timeout_seconds': 0}
         state = self.call('review_wait', args, control)['result']['structuredContent']
         self.assertEqual(state['status'], 'waiting_for_chatgpt')

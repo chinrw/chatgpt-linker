@@ -36,7 +36,9 @@ class Fixture(unittest.TestCase):
         self._old_sensitive = os.environ.get('CHATGPT_LINKER_SENSITIVE')
         os.environ['CHATGPT_LINKER_SENSITIVE'] = str(self.sensitive)
         self.store = LocalStore(self.base / 'state', create=True)
-        self.env = {**os.environ, 'PYTHONPATH': str(ROOT / 'src')}
+        # CLI fixtures must not inherit a user's live exchange routing or credentials.
+        self.env = {k: v for k, v in os.environ.items() if not k.startswith('CHATGPT_LINKER_EXCHANGE_')}
+        self.env['PYTHONPATH'] = str(ROOT / 'src')
         self.command = [sys.executable, '-m', 'chatgpt_linker', '--state', str(self.store.root)]
 
     def tearDown(self):
