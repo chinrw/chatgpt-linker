@@ -25,7 +25,7 @@ git push origin main
 
 `scripts/publish-github.sh` 与上面的仓库无关，它的用途是：从当前源码生成一份**白名单快照**，推送到一个**尚不存在的私有仓库**。适用于想把同一份源码放进另一个（例如 private 镜像）仓库的场景。
 
-需要本机已安装并登录 GitHub CLI（`gh`）、Git、Python 3.11+：
+需要本机已安装并登录 GitHub CLI（`gh`）、Git、Python 3.12+：
 
 ```sh
 gh auth login --hostname github.com

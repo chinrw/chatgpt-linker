@@ -5,7 +5,7 @@
 A subscription-only, user-initiated plan-review handoff with sanitized evidence,
 a constrained MCP outbox, and an explicit-invocation agent skill.
 
-版本：**0.1.0，Alpha**。这是可运行的实现，不只是设计文档。运行时仅依赖 Python 标准库，支持 Linux/macOS/WSL2，要求 Python 3.11+。项目不包含任何 OpenAI 模型 API 后端。
+版本：**0.1.0，Alpha**。这是可运行的实现，不只是设计文档。运行时仅依赖 Python 标准库，支持 Linux/macOS/WSL2，要求 Python 3.12+。项目不包含任何 OpenAI 模型 API 后端。
 
 公开仓库增量模式还需要本机 Git 和匿名 GitHub API 的网络访问；普通本地材料模式无需这两项。
 
