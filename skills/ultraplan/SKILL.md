@@ -264,17 +264,14 @@ actions outside the user's request. The CLI cannot discover these rules itself.
 ## Hand off to ChatGPT
 
 Run `chatgpt-linker --state "$STATE" prompt <id>` and present its exact generated
-prompt in a copyable code block. Ask the user to enable Deep Research in ChatGPT
-Chat through the tools menu or `/Deepresearch`, and confirm Linker is an available
-research source before sending. Pasting the prompt does not switch the UI mode.
-Deep Research uses app read actions, not app write actions. After research, the
-user returns to ordinary Chat with write tools to submit the complete report
-using the same request ID and bundle hash. If write tools remain unavailable,
-use the existing Markdown export/manual import path. Do not treat a completed
-research report as a successful Linker submission without its receipt.
+prompt in a copyable code block. Ask the user to select ChatGPT Linker in ordinary
+Chat and send the prompt. ChatGPT reads the evidence, reviews the plan, and submits
+the complete report in the same conversation using the request ID and bundle hash.
+If write tools are unavailable, use the existing Markdown export/manual import
+path. Only a successful submission receipt confirms the Linker handoff.
 
 After displaying the prompt, use the host's question tool, when available and
-permitted in the current mode, to ask whether the user has sent it with Deep Research enabled in ChatGPT.
+permitted in the current mode, to ask whether the user has sent it in ordinary Chat with ChatGPT Linker selected.
 Offer "Sent; wait for the review" and "Later; keep the request". For example,
 use `request_user_input_async`, `AskUserQuestion`, or `question` if exposed by the
 host. Include the request ID and refer to the displayed prompt. This question

@@ -49,7 +49,9 @@ class FollowupTests(Fixture):
         self.assertIn(parent, prompt)
         self.assertIn(child['request_id'], prompt)
         self.assertIn('第 2 轮', prompt)
-        self.assertIn('/Deepresearch', prompt)
+        self.assertNotIn('deep research', prompt.lower())
+        self.assertNotIn('/deepresearch', prompt.lower())
+        self.assertIn('在当前对话中完成复审和报告提交', prompt)
         self.assertIn('普通 Chat', prompt)
         self.assertIn('无需访问旧任务', prompt)
 

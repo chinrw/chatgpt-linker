@@ -60,9 +60,9 @@ hash and single result. The user need not rebuild the handoff from scratch.
    Prior approval or processing of the parent does not authorize arbitrary new
    evidence. The child stays on the parent's exchange node; resolve errors there.
 5. Generate `prompt <child_id>` and present that exact prompt. The user may send
-   it in the existing ChatGPT conversation or a new one, with Deep Research enabled
-   as described in the main skill. Research is read-only; submission happens in
-   ordinary Chat or through manual import. Linker neither records
+   it in the existing ordinary Chat conversation or a new one with ChatGPT Linker
+   selected. ChatGPT reads the evidence and submits the report in that conversation;
+   use manual import if write tools are unavailable. Linker neither records
    nor controls a ChatGPT conversation URL. The child includes the immediate
    parent's complete report and plan/question, so it does not require access to
    the parent's expired or subsequently revoked tool grant. It does not carry

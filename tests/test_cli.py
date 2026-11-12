@@ -71,14 +71,15 @@ class CLITests(Fixture):
         self.assertEqual(json.loads(p.stderr)['error'],'STATE_IN_PROJECT')
         self.assertFalse(target.exists())
 
-    def test_prompt_requests_deep_research_then_separate_chat_submission(self):
+    def test_prompt_requests_review_and_submission_in_ordinary_chat(self):
         rid, sha = self.published()
         response = self.run_cli('prompt', rid)
         self.assertEqual(response.returncode, 0, response.stderr)
         prompt = response.stdout
-        self.assertIn('/Deepresearch', prompt)
-        self.assertIn('仅粘贴提示词不会切换模式', prompt)
-        self.assertIn('Deep Research 不执行 app 写操作', prompt)
+        self.assertIn('在当前对话中完成复审和报告提交', prompt)
+        self.assertNotIn('deep research', prompt.lower())
+        self.assertNotIn('/deepresearch', prompt.lower())
+        self.assertLess(prompt.index('fetch'), prompt.index('submit_review'))
         self.assertLess(prompt.index('普通 Chat'), prompt.index('submit_review'))
         self.assertIn(rid + ':request', prompt)
         self.assertIn('bundle_sha256=' + sha, prompt)

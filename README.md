@@ -9,7 +9,7 @@ a constrained MCP outbox, and an explicit-invocation agent skill.
 
 公开仓库增量模式还需要本机 Git 和匿名 GitHub API 的网络访问；普通本地材料模式无需这两项。
 
-> 自动化边界：你仍需在 ChatGPT 的 Chat 中启用 Deep Research 并发送任务提示。研究阶段只读；报告完成后回到普通 Chat 提交，写工具不可用时导出 Markdown 本地导入。平台可能要求确认结果提交。程序不创建 ChatGPT 对话，不读取 Cookie，不抓取网页回答，也不能认证实际使用了哪个模型。首次必须用合成任务验证你的账号、模型和自定义工具组合。当前发布的本地测试不等于已完成真实 ChatGPT 接入。
+> 自动化边界：你仍需在普通 Chat 中选择 ChatGPT Linker 并发送任务提示。ChatGPT 读取材料、完成复审后，在同一对话中提交完整报告；写工具不可用时导出 Markdown 本地导入。平台可能要求确认结果提交。程序不创建 ChatGPT 对话，不读取 Cookie，不抓取网页回答，也不能认证实际使用了哪个模型。首次必须用合成任务验证你的账号、模型和自定义工具组合。当前发布的本地测试不等于已完成真实 ChatGPT 接入。
 
 ## 正常工作流
 
@@ -17,9 +17,9 @@ a constrained MCP outbox, and an explicit-invocation agent skill.
 $ultraplan
   → agent 核验仓库可见性，选择 context、计划和本地改动
   → CLI 本地检查、冻结证据、发布任务
-  → 你在 ChatGPT 的 Chat 中启用 Deep Research，发送生成的提示
-  → 研究阶段通过 search / fetch 核验并重新规划
-  → 回到普通 Chat，通过 submit_review 提交完整 Markdown；或导出后本地导入
+  → 你在普通 Chat 中选择 ChatGPT Linker，发送生成的提示
+  → ChatGPT 通过 search / fetch 核验并重新规划
+  → 在同一对话中通过 submit_review 提交完整 Markdown；或导出后本地导入
   → 本地 wait / review_result 取得结果和来源漂移检查
   → agent 核验报告，继续原任务中已授权的实现与测试
 ```
@@ -281,7 +281,7 @@ chatgpt-linker result "$RID"
 
 官方 Tunnel 是传输方式，不是模型 API 后端。应使用清理环境的 launcher 启动 `serve`（`scripts/tunnel-launcher.example.sh` 的形状：`env -i` + 绝对路径解释器 + 空 HOME）。**本项目不提供 OS 级文件系统隔离**：launcher 只清理环境，进程读权限仍等同于你的账号；需要更强隔离请自行用沙箱运行同一条 `serve` 命令。**本项目没有公网 OAuth 服务；不要把本地调试 HTTP 端口直接暴露到互联网。**
 
-连接后，工具清单应只有 `search`、`fetch`、`submit_review`。在 ChatGPT 的 Chat 中启用 Deep Research 并确认 Linker 来源可用，发送 `prompt "$RID"` 的结果。研究完成后在普通 Chat 提交完整报告；只有 submit_review 成功才完成交接。等待结果：
+连接后，工具清单应只有 `search`、`fetch`、`submit_review`。在普通 Chat 中选择 ChatGPT Linker，发送 `prompt "$RID"` 的结果。复审完成后在同一对话中提交完整报告；只有 submit_review 成功才完成交接。等待结果：
 
 ```sh
 chatgpt-linker wait "$RID" --timeout 5400
