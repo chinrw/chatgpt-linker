@@ -49,7 +49,7 @@
               pkgs.git
               pkgs.openssl
             ];
-            unittestFlagsArray = [
+            unittestFlags = [
               "-s"
               "tests"
             ];
